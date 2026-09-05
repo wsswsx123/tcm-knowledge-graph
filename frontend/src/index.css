@@ -1,0 +1,37 @@
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400;500;600;700;900&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --font-serif: 'Noto Serif SC', serif;
+    --font-sans: Inter, ui-sans-serif, system-ui, sans-serif;
+  }
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: #fdfbf7;
+  color: #3e3a39;
+}
+
+h1, h2, h3, h4, h5, h6, .font-serif {
+  font-family: var(--font-serif);
+}
+
+.tcm-border {
+  border: 1px solid #8b7355;
+  padding: 4px;
+  position: relative;
+}
+.tcm-border::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  right: 2px;
+  bottom: 2px;
+  border: 1px solid #8b7355;
+  pointer-events: none;
+}

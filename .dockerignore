@@ -1,0 +1,20 @@
+.git
+.idea
+venv
+**/__pycache__
+**/*.pyc
+backend/models
+backend/venv
+backend/logs
+frontend/node_modules
+frontend/dist
+logs
+*.log
+.env
+docs
+
+# 本地大模型与句向量模型不打入构建上下文（镜像内通过 HF 预下载）
+bge-small-zh-v1.5
+bge-large-zh-v1.5
+*.bin
+*.safetensors

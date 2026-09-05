@@ -1,0 +1,26 @@
+# 容器化部署依赖（CPU 版，LLM 走 Ollama，不含本地 Transformers 权重）
+# 注意：sentence-transformers 会传递安装 CPU 版 torch，用于 bge-small-zh 句向量。
+Flask==2.3.3
+Flask-CORS==4.0.0
+Flask-SQLAlchemy==3.1.1
+PyMySQL==1.1.0
+py2neo==2021.2.4
+python-dotenv==1.0.0
+gunicorn==21.2.0
+
+langchain==0.3.4
+langchain-core
+langchain-community==0.3.3
+langchain-ollama
+
+sentence-transformers==3.3.1
+faiss-cpu==1.9.0
+numpy==1.26.4
+scikit-learn==1.5.2
+
+mcp==1.2.0
+
+PyJWT==2.9.0
+Flask-Limiter==3.8.0
+Flask-Migrate==4.0.7
+redis==5.0.3

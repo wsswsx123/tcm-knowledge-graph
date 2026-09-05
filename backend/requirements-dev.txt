@@ -1,0 +1,6 @@
+# 单元测试最小依赖（不含 torch / sentence-transformers / faiss 等重依赖）
+# 安装：pip install -r requirements-dev.txt
+pytest==8.4.2
+numpy==1.26.4
+scikit-learn==1.5.2
+python-dotenv==1.0.0
