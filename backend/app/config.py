@@ -116,6 +116,20 @@ class Config:
     # 会话过期秒数（默认 24 小时）
     SESSION_TTL = int(os.environ.get('SESSION_TTL', '86400'))
 
+    # ===== 高频问答缓存（降低重复问诊的 LLM 推理成本）=====
+    # 仅缓存 stage='plan' 且体质置信度达标的最终方案；澄清/拒答不缓存
+    QA_CACHE_ENABLED = os.environ.get('QA_CACHE_ENABLED', 'true').lower() == 'true'
+    # 缓存过期秒数（默认 24 小时）
+    QA_CACHE_TTL = int(os.environ.get('QA_CACHE_TTL', '86400'))
+    # 只缓存置信度 >= 该阈值的方案，避免把低可信结论扩散给更多用户
+    QA_CACHE_MIN_CONFIDENCE = float(os.environ.get('QA_CACHE_MIN_CONFIDENCE', '0.9'))
+
+    # ===== Token 用量与成本 =====
+    # 每 1K token 单价（元）。本地 Ollama 默认 0（免费）；
+    # 切换云端 API 时按服务商定价在 .env 配置，如 DeepSeek 输入 0.001。
+    LLM_PRICE_INPUT_PER_1K = float(os.environ.get('LLM_PRICE_INPUT_PER_1K', '0'))
+    LLM_PRICE_OUTPUT_PER_1K = float(os.environ.get('LLM_PRICE_OUTPUT_PER_1K', '0'))
+
 
 def _warn_default_secrets():
     """生产环境仍使用默认凭据时告警（开发环境静默）。"""

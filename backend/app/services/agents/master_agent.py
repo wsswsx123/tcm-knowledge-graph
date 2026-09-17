@@ -12,6 +12,7 @@
   2) 问卷锁定模式（seed）：从王琦量表测评结果直接锁死体质，跳过 ConstitutionAgent，
      仅用 SymptomAgent 提取用户个性化偏好后直接进入 PlanAgent。
 """
+import copy
 import logging
 import time
 import uuid
@@ -22,6 +23,8 @@ from .symptom_agent import SymptomAgent
 from .constitution_agent import ConstitutionAgent
 from .plan_agent import PlanAgent
 from ..session_store import get_session_store
+from ..qa_cache import get_qa_cache, build_cache_key
+from ..token_usage import summarize_trace_usage, record_llm_usage
 from ...config import Config
 
 logger = logging.getLogger(__name__)
@@ -258,6 +261,17 @@ class MasterAgent(BaseAgent):
         except Exception:
             pass
 
+        # ===== 高频问答缓存：命中则跳过三级 Agent（LLM + 工具全部不调用）=====
+        qa_cache = get_qa_cache()
+        cache_key = build_cache_key(user_input, state) if qa_cache else None
+        if qa_cache and cache_key:
+            cached_entry = qa_cache.get(cache_key)
+            if isinstance(cached_entry, dict) and cached_entry.get('response'):
+                return self._serve_cached_response(
+                    cached_entry['response'], state, session_id,
+                    request_id, started, trace)
+            self._record_cache_miss(request_id)
+
         # 一级：症状分析（两种模式都执行；seed 模式下用于提取用户个性化非体质类信息）
         symptom_result = self.symptom_agent.analyze(user_input, trace)
         self._accumulate(state, symptom_result)
@@ -320,6 +334,9 @@ class MasterAgent(BaseAgent):
             response = self._assemble('plan', symptom_result, con_output,
                                       plan_output, trace, elapsed, session_id, state['turn'],
                                       request_id=request_id)
+            self._record_turn_usage(response, trace, request_id)
+            # 高置信度方案写入高频问答缓存（下一次相同上下文问诊零推理返回）
+            self._store_qa_cache(qa_cache, cache_key, response)
             # LLM 上下文存"方案"摘要
             state['history'].append({'role': 'assistant', 'content': self._summarize_plan(response)})
             # 前端显示用消息保留完整 response
@@ -343,6 +360,8 @@ class MasterAgent(BaseAgent):
             response = self._assemble('clarify', symptom_result, con_output,
                                       None, trace, elapsed, session_id, state['turn'],
                                       request_id=request_id)
+            # 澄清轮也可能有 LLM 调用（体质判定阶段），照常记录 token 用量；澄清不进缓存
+            self._record_turn_usage(response, trace, request_id)
             state['history'].append({'role': 'assistant', 'content': response.get('clarification') or ''})
             # 前端显示用消息：保留完整结构化 response
             assistant_content = (response.get('clarification') or '请补充信息')
@@ -362,6 +381,9 @@ class MasterAgent(BaseAgent):
         response = self._assemble('plan', symptom_result, con_output,
                                   plan_output, trace, elapsed, session_id, state['turn'],
                                   request_id=request_id)
+        self._record_turn_usage(response, trace, request_id)
+        # 高置信度方案写入高频问答缓存（下一次相同上下文问诊零推理返回）
+        self._store_qa_cache(qa_cache, cache_key, response)
         # LLM 上下文存"方案"的自然语言摘要（不要塞整个 dict，可能超 token）
         state['history'].append({'role': 'assistant', 'content': self._summarize_plan(response)})
         # 前端显示用消息保留完整 response（结构化气泡渲染）
@@ -494,8 +516,104 @@ class MasterAgent(BaseAgent):
             'pipeline': pipeline,
             'fallback_stack': fallback_stack,
             'grounding': grounding,
+            # 本对话轮次的 token 用量汇总（三级 Agent 各次 LLM 调用之和）
+            'token_usage': summarize_trace_usage(trace),
+            # 是否由高频问答缓存直接返回（正常推理路径恒为 False）
+            'cache_hit': False,
             'disclaimer': '本系统为科研演示，结论仅供养生参考，不能替代执业医师诊断。',
         }
+
+    # ---------- 高频问答缓存 & Token 轮次汇总 ----------
+
+    def _serve_cached_response(self, cached_response: Dict[str, Any], state: dict,
+                               session_id: str, request_id, started: float,
+                               trace: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """缓存命中：零 LLM 调用复用方案，重写会话级字段并持久化消息。"""
+        try:
+            from ..observability import get_hub
+            hub = get_hub()
+            hub.record_cache(True)
+            hub.record_event('qa_cache', hit=True, request_id=request_id)
+        except Exception:
+            pass
+
+        response = copy.deepcopy(cached_response)
+        elapsed = round(time.time() - started, 4)
+        response.update({
+            'request_id': request_id,
+            'session_id': session_id,
+            'turn': state['turn'],
+            'latency_sec': elapsed,
+            'latency_ok': elapsed <= getattr(Config, 'INFERENCE_LATENCY_TARGET', 3.0),
+            'cache_hit': True,
+            'token_usage': {
+                'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0,
+                'estimated_cost': 0.0, 'llm_calls': 0, 'estimated': False,
+                'served_by': 'qa_cache',
+            },
+        })
+        # 0 token 缓存命中也写一条 JSONL，便于审计"省了多少推理"（不计入 LLM 指标）
+        record_llm_usage(
+            agent=self.name, source='qa_cache_hit', request_id=request_id,
+            prompt_tokens=0, completion_tokens=0, cached=True, backend='cache')
+
+        # 会话历史 / UI 气泡照常持久化，保证多轮连续与刷新恢复
+        state['history'].append({'role': 'assistant', 'content': self._summarize_plan(response)})
+        state['chat_messages'].append({
+            'role': 'assistant',
+            'content': '已生成调理方案（高频问答缓存命中）',
+            'response': response,
+            'error': False,
+        })
+        self._store.set(session_id, state)
+        return response
+
+    @staticmethod
+    def _record_cache_miss(request_id=None):
+        try:
+            from ..observability import get_hub
+            hub = get_hub()
+            hub.record_cache(False)
+            hub.record_event('qa_cache', hit=False, request_id=request_id)
+        except Exception:
+            pass
+
+    @staticmethod
+    def _store_qa_cache(qa_cache, cache_key: Optional[str], response: Dict[str, Any]):
+        """只缓存高置信度的最终方案（stage=plan），澄清/拒答/低置信度不缓存。"""
+        if qa_cache is None or not cache_key:
+            return
+        try:
+            if response.get('stage') != 'plan' or response.get('rejected'):
+                return
+            cr = response.get('constitution_result') or {}
+            confidence = float(cr.get('confidence') or 0)
+            if confidence < float(getattr(Config, 'QA_CACHE_MIN_CONFIDENCE', 0.9)):
+                return
+            qa_cache.set(
+                cache_key,
+                {'response': copy.deepcopy(response)},
+                int(getattr(Config, 'QA_CACHE_TTL', 86400)),
+            )
+        except Exception as e:  # 缓存写失败绝不影响主链路
+            logger.warning(f"问答缓存写入失败: {e}")
+
+    @staticmethod
+    def _record_turn_usage(response: Dict[str, Any], trace: List[Dict[str, Any]],
+                           request_id=None):
+        """把本轮三级 Agent 的 token 用量汇总写一条审计日志（指标不重复计数）。"""
+        try:
+            usage = response.get('token_usage') or summarize_trace_usage(trace)
+            if not usage.get('llm_calls'):
+                return
+            record_llm_usage(
+                agent='master_agent', source='turn_summary', request_id=request_id,
+                prompt_tokens=usage.get('prompt_tokens', 0),
+                completion_tokens=usage.get('completion_tokens', 0),
+                estimated=usage.get('estimated', False),
+                backend='aggregated', count_to_metrics=False)
+        except Exception:
+            pass
 
     def reset(self, session_id: str):
         self._store.delete(session_id)

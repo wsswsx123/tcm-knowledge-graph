@@ -1,13 +1,18 @@
-"""
-最小化验证脚本：测试 MasterAgent.seed() + get_state() 的 locked 分支。
+"""最小化验证脚本：测试 MasterAgent.seed() + get_state() 的 locked 分支。
+
 不连 DB，直接使用 MemorySessionStore。
 不运行 plan_agent.run（避免需要 Neo4j/LLM），只验证 chat() 中 locked 分支构造的 con_output。
+
+用法::
+
+    python scripts/verify_seed.py
 """
 import os
 import sys
 import traceback
 
-_BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
+_PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_BACKEND_DIR = os.path.join(_PROJECT_DIR, "backend")
 if _BACKEND_DIR not in sys.path:
     sys.path.insert(0, _BACKEND_DIR)
 

@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>中医体质辨识系统 - 整体架构图</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 40px 20px;
+  }
+  .container {
+    width: 100%;
+    max-width: 1200px;
+  }
+  .title {
+    text-align: center;
+    color: #f1f5f9;
+    font-size: 28px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    letter-spacing: 2px;
+  }
+  .subtitle {
+    text-align: center;
+    color: #94a3b8;
+    font-size: 14px;
+    margin-bottom: 36px;
+  }
+  .layer {
+    position: relative;
+    border-radius: 16px;
+    padding: 24px 28px 28px 28px;
+    margin-bottom: 0;
+  }
+  .layer-frontend {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(37, 99, 235, 0.08) 100%);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+  }
+  .layer-backend {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(5, 150, 105, 0.08) 100%);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+  }
+  .layer-data {
+    background: linear-gradient(135deg, rgba(168, 85, 247, 0.15) 0%, rgba(126, 34, 206, 0.08) 100%);
+    border: 1px solid rgba(168, 85, 247, 0.3);
+  }
+  .layer-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 4px 14px;
+    border-radius: 20px;
+    margin-bottom: 18px;
+    letter-spacing: 1px;
+  }
+  .label-frontend { background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.4); }
+  .label-backend { background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); }
+  .label-data { background: rgba(168, 85, 247, 0.2); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.4); }
+  .cards {
+    display: grid;
+    gap: 12px;
+  }
+  .cards-5 { grid-template-columns: repeat(5, 1fr); }
+  .cards-6 { grid-template-columns: repeat(6, 1fr); }
+  .cards-4 { grid-template-columns: repeat(4, 1fr); }
+  .card {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    padding: 14px 12px;
+    text-align: center;
+    transition: all 0.2s ease;
+  }
+  .card:hover {
+    background: rgba(255, 255, 255, 0.1);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  }
+  .card-icon {
+    font-size: 22px;
+    margin-bottom: 8px;
+  }
+  .card-name {
+    color: #f1f5f9;
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .card-desc {
+    color: #94a3b8;
+    font-size: 11px;
+    line-height: 1.5;
+  }
+  .arrow-down {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 36px;
+    position: relative;
+  }
+  .arrow-down::before {
+    content: '';
+    width: 2px;
+    height: 20px;
+    background: linear-gradient(to bottom, rgba(148, 163, 184, 0.6), rgba(148, 163, 184, 0.2));
+  }
+  .arrow-down::after {
+    content: '';
+    position: absolute;
+    bottom: 4px;
+    width: 0;
+    height: 0;
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-top: 8px solid rgba(148, 163, 184, 0.5);
+  }
+  .arrow-label {
+    position: absolute;
+    right: 20px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #64748b;
+    font-size: 11px;
+    background: rgba(15, 23, 42, 0.8);
+    padding: 2px 10px;
+    border-radius: 10px;
+    border: 1px solid rgba(100, 116, 139, 0.2);
+  }
+  .mcp-bypass {
+    margin-top: 20px;
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.12) 0%, rgba(217, 119, 6, 0.06) 100%);
+    border: 1px dashed rgba(245, 158, 11, 0.4);
+    border-radius: 12px;
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .mcp-icon {
+    font-size: 28px;
+    flex-shrink: 0;
+  }
+  .mcp-content { flex: 1; }
+  .mcp-title {
+    color: #fbbf24;
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .mcp-desc {
+    color: #94a3b8;
+    font-size: 12px;
+    line-height: 1.6;
+  }
+  .mcp-tag {
+    display: inline-block;
+    background: rgba(245, 158, 11, 0.15);
+    color: #fcd34d;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    margin-right: 6px;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+  }
+  .footer {
+    text-align: center;
+    margin-top: 28px;
+    color: #475569;
+    font-size: 12px;
+  }
+  @media (max-width: 900px) {
+    .cards-5, .cards-6 { grid-template-columns: repeat(3, 1fr); }
+    .cards-4 { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 600px) {
+    .cards-5, .cards-6, .cards-4 { grid-template-columns: repeat(2, 1fr); }
+    .title { font-size: 20px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="title">中医体质辨识与养生指导系统</div>
+  <div class="subtitle">System Architecture Overview · 前后端分离 · 多 Agent 问诊 · 双路 RAG</div>
+
+  <!-- 前端层 -->
+  <div class="layer layer-frontend">
+    <div class="layer-label label-frontend">🖥 前端层 · Frontend</div>
+    <div class="cards cards-5">
+      <div class="card">
+        <div class="card-icon">⚡</div>
+        <div class="card-name">Vue 3</div>
+        <div class="card-desc">单页应用 SPA<br>Composition API</div>
+      </div>
+      <div class="card">
+        <div class="card-icon">📦</div>
+        <div class="card-name">Pinia</div>
+        <div class="card-desc">状态管理<br>localStorage 持久化</div>
+      </div>
+      <div class="card">
+        <div class="card-icon">🛣</div>
+        <div class="card-name">Vue Router</div>
+        <div class="card-desc">路由管理<br>多页面导航</div>
+      </div>
+      <div class="card">
+        <div class="card-icon">🎨</div>
+        <div class="card-name">Tailwind CSS</div>
+        <div class="card-desc">原子化 CSS<br>快速构建 UI</div>
+      </div>
+      <div class="card">
+        <div class="card-icon">📊</div>
+        <div class="card-name">ECharts</div>
+        <div class="card-desc">雷达图/图谱可视化<br>数据图表渲染</div>
+      </div>
+    </div>
+    <div style="margin-top: 12px; display: flex; gap: 10px; flex-wrap: wrap;">
+      <span style="color: #60a5fa; font-size: 11px; background: rgba(59,130,246,0.1); padding: 3px 10px; border-radius: 4px;">开发：Vite 代理 /api → 后端 5000</span>
+      <span style="color: #60a5fa; font-size: 11px; background: rgba(59,130,246,0.1); padding: 3px 10px; border-radius: 4px;">生产：Nginx 托管静态资源 + 反向代理</span>
+    </div>
+  </div>
+
+  <div class="arrow-down"><span class="arrow-label">REST API · JSON</span></div>
+
+  <!-- 后端层 -->
+  <div class="layer layer-backend">
+    <div class="layer-label label-backend">⚙ 后端层 · Backend (Flask)</div>
+    <div class="cards cards-6">
+      <div class="card">
+        <div class="card-icon">🔐</div>
+        <div class="card-name">auth</div>
+        <div class="card-desc">用户认证<br>注册/登录/JWT</div>
+      </div>
+      <div class="card">
+        <div class="card-icon">📋</div>
+        <div class="card-name">assessment</div>
+        <div class="card-desc">问卷测评<br>王琦量表计分</div>
+      </div>
+      <div class="card">
+        <div class="card-icon">🤖</div>
+        <div class="card-name">agents</div>
+        <div class="card-desc">多 Agent 问诊<br>Master + 3 子 Agent</div>
+      </div>
+      <div class="card">
+        <div class="card-icon">💊</div>
+        <div class="card-name">recommend</div>
+        <div class="card-desc">推荐接口<br>食疗/穴位/运动</div>
+      </div>
+      <div class="card">
+        <div class="card-icon">🕸</div>
+        <div class="card-name">graph</div>
+        <div class="card-desc">知识图谱查询<br>Neo4j 检索</div>
+      </div>
+      <div class="card">
+        <div class="card-icon">📡</div>
+        <div class="card-name">observability</div>
+        <div class="card-desc">存活/就绪探针<br>指标/OpenAPI</div>
+      </div>
+    </div>
+    <div style="margin-top: 12px; display: flex; gap: 10px; flex-wrap: wrap;">
+      <span style="color: #34d399; font-size: 11px; background: rgba(16,185,129,0.1); padding: 3px 10px; border-radius: 4px;">请求 ID 透传中间件</span>
+      <span style="color: #34d399; font-size: 11px; background: rgba(16,185,129,0.1); padding: 3px 10px; border-radius: 4px;">统一错误响应中间件</span>
+      <span style="color: #34d399; font-size: 11px; background: rgba(16,185,129,0.1); padding: 3px 10px; border-radius: 4px;">结构化 JSON 日志 + 文件轮转</span>
+    </div>
+  </div>
+
+  <div class="arrow-down"><span class="arrow-label">数据读写 · 模型推理</span></div>
+
+  <!-- 数据与智能层 -->
+  <div class="layer layer-data">
+    <div class="layer-label label-data">🗄 数据与智能层 · Data & AI</div>
+    <div class="cards cards-5">
+      <div class="card">
+        <div class="card-icon">🐬</div>
+        <div class="card-name">MySQL 8.0</div>
+        <div class="card-desc">用户/题目/测评结果<br>结构化业务数据</div>
+      </div>
+      <div class="card">
+        <div class="card-icon">🔵</div>
+        <div class="card-name">Neo4j 4.4+</div>
+        <div class="card-desc">体质/穴位/食材图谱<br>知识图谱存储</div>
+      </div>
+      <div class="card">
+        <div class="card-icon">🟥</div>
+        <div class="card-name">Redis</div>
+        <div class="card-desc">会话状态存储<br>高频问答缓存</div>
+      </div>
+      <div class="card">
+        <div class="card-icon">🔍</div>
+        <div class="card-name">FAISS</div>
+        <div class="card-desc">证型案例向量库<br>语义检索 RAG</div>
+      </div>
+      <div class="card">
+        <div class="card-icon">🧠</div>
+        <div class="card-name">Ollama</div>
+        <div class="card-desc">Qwen2.5-3B-Instruct<br>本地大模型推理</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MCP 旁路 -->
+  <div class="mcp-bypass">
+    <div class="mcp-icon">🔌</div>
+    <div class="mcp-content">
+      <div class="mcp-title">MCP Server · 工具旁路</div>
+      <div class="mcp-desc">
+        <span class="mcp-tag">stdio 协议</span>
+        <span class="mcp-tag">4 个工具</span>
+        <span class="mcp-tag">自动重试</span>
+        <span class="mcp-tag">超时控制</span>
+        独立 MCP Server 通过 stdio 暴露图谱/穴位/RAG 工具，与本地 Python 工具同签名双活；MCP 不可用时自动回退本地调用，对上层 Agent 透明。
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    中医体质辨识与养生指导系统 · Architecture Diagram · Docker Compose 六服务编排
+  </div>
+</div>
+</body>
+</html>

@@ -36,6 +36,10 @@ instance/
 .DS_Store
 Thumbs.db
 
+# Postman 本地工件
+.postman/
+postman/
+
 # Logs
 logs/
 backend/logs/

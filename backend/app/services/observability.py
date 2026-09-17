@@ -75,6 +75,14 @@ class ObservabilityHub:
         self._tool_mcp_calls = 0
         self._tool_local_calls = 0
         self._tool_mcp_fallbacks = 0
+        # Token 用量与成本（防失控的实时计量）
+        self._llm_calls = 0
+        self._llm_prompt_tokens = 0
+        self._llm_completion_tokens = 0
+        self._llm_estimated_cost = 0.0
+        # 高频问答缓存命中
+        self._qa_cache_hits = 0
+        self._qa_cache_misses = 0
 
     def new_request_id(self) -> str:
         return uuid.uuid4().hex[:16]
@@ -107,6 +115,24 @@ class ObservabilityHub:
                 if payload.get('mcp_fell_back'):
                     self._tool_mcp_fallbacks += 1
 
+    def record_token_usage(self, prompt_tokens: int = 0, completion_tokens: int = 0,
+                           cost: float = 0.0, cached: bool = False,
+                           estimated: bool = False):
+        """累计一次 LLM 调用的 token 用量（cached 调用 token=0，计入调用次数/缓存命中另算）。"""
+        with _lock:
+            self._llm_calls += 1
+            self._llm_prompt_tokens += int(prompt_tokens or 0)
+            self._llm_completion_tokens += int(completion_tokens or 0)
+            self._llm_estimated_cost += float(cost or 0)
+
+    def record_cache(self, hit: bool):
+        """记录高频问答缓存命中/未命中。"""
+        with _lock:
+            if hit:
+                self._qa_cache_hits += 1
+            else:
+                self._qa_cache_misses += 1
+
     def fallback_stack(self) -> List[dict]:
         s = self._state
         active_map = {
@@ -135,6 +161,8 @@ class ObservabilityHub:
 
     def snapshot(self) -> Dict[str, Any]:
         with _lock:
+            total_tokens = self._llm_prompt_tokens + self._llm_completion_tokens
+            cache_total = self._qa_cache_hits + self._qa_cache_misses
             return {
                 'runtime': dict(self._state),
                 'fallback_stack': self.fallback_stack(),
@@ -147,6 +175,16 @@ class ObservabilityHub:
                     'tool_mcp_calls': self._tool_mcp_calls,
                     'tool_local_calls': self._tool_local_calls,
                     'tool_mcp_fallbacks': self._tool_mcp_fallbacks,
+                    # Token 用量与成本
+                    'llm_calls': self._llm_calls,
+                    'llm_prompt_tokens': self._llm_prompt_tokens,
+                    'llm_completion_tokens': self._llm_completion_tokens,
+                    'llm_total_tokens': total_tokens,
+                    'llm_estimated_cost': round(self._llm_estimated_cost, 6),
+                    # 高频问答缓存
+                    'qa_cache_hits': self._qa_cache_hits,
+                    'qa_cache_misses': self._qa_cache_misses,
+                    'qa_cache_hit_rate': round(self._qa_cache_hits / cache_total, 4) if cache_total else 0,
                 },
                 'recent_events': list(self._events[-20:]),
             }

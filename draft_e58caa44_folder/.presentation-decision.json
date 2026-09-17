@@ -1,0 +1,1 @@
+{"audience":"需要理解和学习本项目技术栈的开发者与学生","reader_task":"掌握项目中所有技术术语的含义，并能按教程完成各技术模块的学习与实践","genre_contract":null,"adapter":null,"presentation_mode":"rich","visual_plan":{"reason":"技术术语用表格集中呈现便于查阅；架构关系用画板展示降低理解成本；教程部分用代码块和步骤列表保证可执行性","blocks":[{"type":"whiteboard","min_count":2,"purpose":"展示系统整体架构和多Agent协作流程"}]}}

@@ -15,6 +15,7 @@ import time
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from ...config import Config
+from ..token_usage import extract_usage, record_llm_usage
 
 logger = logging.getLogger(__name__)
 
@@ -124,9 +125,17 @@ class BaseAgent:
             resp = llm.invoke(prompt)
             elapsed = round(time.time() - started, 4)
             text = resp.content if hasattr(resp, 'content') else str(resp)
+            usage = extract_usage(resp, len(prompt), len(text or ''))
+            record_llm_usage(
+                agent=self.name, backend=_llm_backend,
+                prompt_tokens=usage['prompt_tokens'],
+                completion_tokens=usage['completion_tokens'],
+                estimated=usage['estimated'], function_calling=False,
+            )
             trace.append({
                 'agent': self.name, 'degraded': False, 'elapsed': elapsed,
                 'backend': _llm_backend, 'function_calling': False,
+                'token_usage': usage,
             })
             return text
         except Exception as e:
@@ -163,13 +172,14 @@ class BaseAgent:
 
         max_rounds = getattr(Config, 'TOOL_CALLING_MAX_ROUNDS', 3)
         used: List[str] = []
+        round_usages: List[Dict[str, Any]] = []
         started = time.time()
         try:
             from langchain_core.messages import HumanMessage, ToolMessage
             bound = llm.bind_tools(tools)
             messages = [HumanMessage(content=prompt)]
             final_text = ''
-            for _ in range(max_rounds):
+            for round_idx in range(max_rounds):
                 ai = bound.invoke(messages)
                 messages.append(ai)
                 tool_calls = getattr(ai, 'tool_calls', None) or []
@@ -177,6 +187,16 @@ class BaseAgent:
                 if isinstance(content, list):
                     content = ''.join(
                         (c.get('text') if isinstance(c, dict) else str(c)) for c in content)
+                # Token 计量：每轮 bind_tools 推理都是一次真实 LLM 调用
+                # prompt 长度按初始 prompt 粗估兜底（含工具消息时偏小，但 Ollama 正常会回真实计数）
+                usage = extract_usage(ai, len(prompt), len(content or ''))
+                round_usages.append(usage)
+                record_llm_usage(
+                    agent=self.name, backend=_llm_backend,
+                    prompt_tokens=usage['prompt_tokens'],
+                    completion_tokens=usage['completion_tokens'],
+                    estimated=usage['estimated'], function_calling=True,
+                )
                 if not tool_calls:
                     final_text = content
                     break
@@ -199,10 +219,16 @@ class BaseAgent:
                     })
                     messages.append(ToolMessage(content=payload, tool_call_id=tid or tname))
             elapsed = round(time.time() - started, 4)
+            total_usage = {
+                'prompt_tokens': sum(u['prompt_tokens'] for u in round_usages),
+                'completion_tokens': sum(u['completion_tokens'] for u in round_usages),
+                'estimated': all(u['estimated'] for u in round_usages) if round_usages else False,
+            }
             trace.append({
                 'agent': self.name, 'degraded': False, 'elapsed': elapsed,
                 'backend': _llm_backend, 'function_calling': bool(used),
                 'tools_called': used,
+                'token_usage': total_usage,
             })
             return final_text, used
         except Exception as e:

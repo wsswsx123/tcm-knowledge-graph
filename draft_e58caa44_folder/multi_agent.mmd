@@ -1,0 +1,10 @@
+graph LR
+    user[用户输入] --> master[Master Agent 主控仲裁]
+    master --> symptom[Symptom Agent 症状分析]
+    symptom -->|结构化症状舌象脉象| constitution[Constitution Agent 体质推理]
+    constitution -->|RAG召回 CoT 置信度| plan[Plan Agent 方案生成]
+    plan -->|图谱工具 实体锚定| result[最终方案]
+    constitution -->|置信度低于阈值| clarify[澄清追问]
+    clarify --> user
+    plan --> grounding[Grounding 幻觉抑制]
+    grounding --> result

@@ -1,0 +1,1396 @@
+<title>中医体质辨识系统 — 技术术语全解与实战教程</title>
+
+<p>本文档面向需要理解和上手本项目的开发者与学生，分为两大部分：第一部分按技术分类解释项目中用到的全部专业术语；第二部分按模块提供可直接操作的技术教程，包含安装配置、核心用法和项目中的真实代码示例。</p>
+
+<callout emoji="📌" background-color="light-blue" border-color="blue"><p>阅读建议：术语解释部分可作为词典随时查阅；教程部分建议按"环境搭建 → 后端 → 前端 → AI → 数据库 → 部署"顺序依次实践。</p></callout>
+
+<h1 seq="auto">系统架构总览</h1>
+
+<p>在深入术语之前，先通过架构图建立整体认知。本项目采用前后端分离架构，后端为 Flask REST API，前端为 Vue 3 单页应用，数据层包含 MySQL、Neo4j 和 Redis，AI 层基于 Ollama/Qwen2.5 构建了 RAG 检索增强与多 Agent 问诊系统。</p>
+
+<whiteboard type="mermaid" path="@./architecture.mmd"/>
+
+<h1 seq="auto">第一部分：技术术语解释</h1>
+
+<h2 seq="auto">后端框架与 Web 技术</h2>
+
+<table>
+<colgroup><col width="120"/><col width="160"/><col width="300"/><col width="240"/></colgroup>
+<thead><tr><th background-color="light-gray"><p>术语</p></th><th background-color="light-gray"><p>英文 / 缩写</p></th><th background-color="light-gray"><p>解释</p></th><th background-color="light-gray"><p>本项目中的应用</p></th></tr></thead>
+<tbody>
+<tr><td><p>Flask</p></td><td><p>Flask</p></td><td><p>Python 轻量级 Web 框架，采用"微内核"设计，核心简单但可通过扩展无限增强。</p></td><td><p>后端 API 服务的主体框架，版本 2.3.3。</p></td></tr>
+<tr><td><p>WSGI</p></td><td><p>Web Server Gateway Interface</p></td><td><p>Python Web 服务器与应用之间的标准接口协议，定义了服务器如何将请求传递给应用、应用如何返回响应。</p></td><td><p>Flask 基于 WSGI；生产环境用 Gunicorn 作为 WSGI 服务器。</p></td></tr>
+<tr><td><p>Gunicorn</p></td><td><p>Green Unicorn</p></td><td><p>Python WSGI HTTP 服务器，基于 pre-fork 模型，用于在生产环境运行 Flask 等 WSGI 应用。</p></td><td><p>Docker 后端容器中以单 worker 启动 Flask 应用。</p></td></tr>
+<tr><td><p>REST API</p></td><td><p>Representational State Transfer</p></td><td><p>一种软件架构风格，使用 HTTP 方法（GET/POST/PUT/DELETE）操作资源，通过 URL 定位资源，JSON 传输数据，无状态。</p></td><td><p>前后端通信的全部接口均为 RESTful 风格，如 /api/auth、/api/assessment。</p></td></tr>
+<tr><td><p>蓝图</p></td><td><p>Blueprint</p></td><td><p>Flask 中的模块化组织方式，可将路由、视图、模板按功能拆分到不同蓝图，再统一注册到应用。</p></td><td><p>auth.py、assessment.py、recommend.py、graph.py、agents.py 等各为一个蓝图。</p></td></tr>
+<tr><td><p>应用工厂</p></td><td><p>Application Factory</p></td><td><p>一种创建 Flask 应用的设计模式，通过函数 create_app() 动态创建并配置应用实例，便于测试和多环境配置。</p></td><td><p>backend/app/__init__.py 中的 create_app() 函数。</p></td></tr>
+<tr><td><p>中间件</p></td><td><p>Middleware</p></td><td><p>在请求到达视图之前或响应返回客户端之后执行的钩子逻辑，可用于日志、鉴权、错误处理、请求 ID 注入等。</p></td><td><p>backend/app/middleware.py 实现请求 ID 透传、请求日志、统一错误响应。</p></td></tr>
+<tr><td><p>服务层</p></td><td><p>Service Layer</p></td><td><p>将业务逻辑从路由中抽离出来的架构分层，路由只负责参数校验和调用服务，服务层承载核心业务规则。</p></td><td><p>backend/app/services/ 目录，包含 constitution.py、rag_service.py、ai_service.py 等。</p></td></tr>
+<tr><td><p>CORS</p></td><td><p>Cross-Origin Resource Sharing</p></td><td><p>跨域资源共享，一种浏览器安全机制，允许服务器声明哪些源站可以访问其资源，解决前后端分离时的跨域请求问题。</p></td><td><p>Flask-CORS 扩展，配置 CORS_ORIGINS 允许前端访问。</p></td></tr>
+<tr><td><p>限流</p></td><td><p>Rate Limiting</p></td><td><p>控制单位时间内请求数量的机制，防止 API 被滥用或攻击，保护后端服务稳定性。</p></td><td><p>Flask-Limiter 扩展，默认 200 requests/minute。</p></td></tr>
+</tbody>
+</table>
+
+<h2 seq="auto">前端技术</h2>
+
+<table>
+<colgroup><col width="120"/><col width="160"/><col width="300"/><col width="240"/></colgroup>
+<thead><tr><th background-color="light-gray"><p>术语</p></th><th background-color="light-gray"><p>英文 / 缩写</p></th><th background-color="light-gray"><p>解释</p></th><th background-color="light-gray"><p>本项目中的应用</p></th></tr></thead>
+<tbody>
+<tr><td><p>Vue 3</p></td><td><p>Vue.js 3</p></td><td><p>渐进式 JavaScript 前端框架，使用虚拟 DOM 和响应式数据绑定，支持组合式 API 和选项式 API 两种写法。</p></td><td><p>前端主体框架，版本 ^3.3.11。</p></td></tr>
+<tr><td><p>组合式 API</p></td><td><p>Composition API</p></td><td><p>Vue 3 引入的新 API 风格，通过 setup() 函数和响应式 API（ref、reactive、computed）组织逻辑，便于逻辑复用和类型推导。</p></td><td><p>前端组件中使用 &lt;script setup&gt; 语法。</p></td></tr>
+<tr><td><p>选项式 API</p></td><td><p>Options API</p></td><td><p>Vue 2 传统的 API 风格，通过 data、methods、computed、watch 等选项对象组织组件逻辑。</p></td><td><p>项目中部分组件仍保留选项式写法，两种风格共存。</p></td></tr>
+<tr><td><p>Vite</p></td><td><p>Vite</p></td><td><p>新一代前端构建工具，开发环境基于浏览器原生 ES Module 实现极速冷启动和热更新，生产环境使用 Rollup 打包。</p></td><td><p>前端构建工具，版本 ^5.0.8，dev 服务器默认 5173 端口。</p></td></tr>
+<tr><td><p>Vue Router</p></td><td><p>Vue Router</p></td><td><p>Vue.js 官方路由管理器，支持动态路由、嵌套路由、路由守卫、懒加载等，实现单页应用的页面切换。</p></td><td><p>版本 ^4.2.5，配置登录、问卷、结果、推荐、图谱等页面路由。</p></td></tr>
+<tr><td><p>Pinia</p></td><td><p>Pinia</p></td><td><p>Vue 3 官方推荐的状态管理库，替代 Vuex，支持组合式 API、TypeScript、DevTools，核心概念为 Store、State、Getter、Action。</p></td><td><p>版本 ^2.1.7，管理用户登录状态、问卷数据、测评结果等全局状态。</p></td></tr>
+<tr><td><p>Axios</p></td><td><p>Axios</p></td><td><p>基于 Promise 的 HTTP 客户端，支持浏览器和 Node.js，提供请求/响应拦截器、自动 JSON 转换、取消请求等功能。</p></td><td><p>版本 ^1.6.2，在 frontend/src/api/index.js 中统一封装所有后端请求。</p></td></tr>
+<tr><td><p>ECharts</p></td><td><p>Apache ECharts</p></td><td><p>百度开源的 JavaScript 数据可视化库，支持折线图、柱状图、饼图、雷达图、关系图等数十种图表类型。</p></td><td><p>版本 ^5.5.0，用于体质雷达图、知识图谱可视化、数据统计图表。</p></td></tr>
+<tr><td><p>Tailwind CSS</p></td><td><p>Tailwind CSS</p></td><td><p>原子化 CSS 框架，通过预定义的工具类（如 flex、p-4、text-lg）直接在 HTML 中编写样式，无需自定义 CSS 文件。</p></td><td><p>版本 ^3.4.19，前端全部 UI 样式基于 Tailwind 工具类实现。</p></td></tr>
+<tr><td><p>PostCSS</p></td><td><p>PostCSS</p></td><td><p>用 JavaScript 转换 CSS 的工具平台，通过插件生态实现 CSS 预处理、后处理、自动前缀、压缩等功能。</p></td><td><p>版本 ^8.5.8，配合 Tailwind 和 Autoprefixer 处理 CSS。</p></td></tr>
+<tr><td><p>Autoprefixer</p></td><td><p>Autoprefixer</p></td><td><p>PostCSS 插件，根据 Can I Use 数据自动为 CSS 属性添加浏览器厂商前缀（如 -webkit-、-moz-），保证跨浏览器兼容性。</p></td><td><p>版本 ^10.4.27，PostCSS 配置中自动启用。</p></td></tr>
+<tr><td><p>lucide-vue-next</p></td><td><p>Lucide Vue</p></td><td><p>Lucide 图标库的 Vue 3 组件版本，提供数百个简洁一致的开源 SVG 图标，以 Vue 组件形式引入。</p></td><td><p>版本 ^0.294.0，页面中所有图标均来自此库。</p></td></tr>
+<tr><td><p>marked</p></td><td><p>marked</p></td><td><p>轻量级 Markdown 解析器，将 Markdown 文本转换为 HTML，支持 GFM（GitHub Flavored Markdown）语法。</p></td><td><p>版本 ^18.0.0，用于渲染 AI 生成的 Markdown 格式回复内容。</p></td></tr>
+</tbody>
+</table>
+
+<h2 seq="auto">数据库与存储</h2>
+
+<table>
+<colgroup><col width="120"/><col width="160"/><col width="300"/><col width="240"/></colgroup>
+<thead><tr><th background-color="light-gray"><p>术语</p></th><th background-color="light-gray"><p>英文 / 缩写</p></th><th background-color="light-gray"><p>解释</p></th><th background-color="light-gray"><p>本项目中的应用</p></th></tr></thead>
+<tbody>
+<tr><td><p>MySQL</p></td><td><p>MySQL</p></td><td><p>开源关系型数据库管理系统，使用 SQL 语言，支持事务、索引、主从复制，是最流行的关系型数据库之一。</p></td><td><p>版本 8.0，存储用户、题目、测评结果等结构化数据，数据库名 tcm_health。</p></td></tr>
+<tr><td><p>关系型数据库</p></td><td><p>Relational Database</p></td><td><p>以二维表格（行和列）组织数据的数据库，表与表之间通过外键建立关联，使用 SQL 进行查询，强调 ACID 事务一致性。</p></td><td><p>MySQL 用于用户体系和问卷测评等需要强一致性的业务数据。</p></td></tr>
+<tr><td><p>Neo4j</p></td><td><p>Neo4j</p></td><td><p>最流行的原生图数据库，以节点（Node）、关系（Relationship）和属性（Property）为核心数据模型，使用 Cypher 查询语言，擅长处理复杂关联关系。</p></td><td><p>版本 4.4，存储体质、穴位、食材、运动等知识图谱，共 1554 个节点。</p></td></tr>
+<tr><td><p>图数据库</p></td><td><p>Graph Database</p></td><td><p>以图结构存储数据的数据库，将实体表示为节点、实体间关系表示为边，天然适合多对多、深度关联、路径查询等场景。</p></td><td><p>Neo4j 用于中医知识图谱，如"体质→宜食食材→对应穴位"的关联查询。</p></td></tr>
+<tr><td><p>Cypher</p></td><td><p>Cypher Query Language</p></td><td><p>Neo4j 的声明式图查询语言，使用 ASCII 艺术风格的模式匹配语法（如 (n)-[r]-&gt;(m)），直观表达节点和关系的遍历。</p></td><td><p>data/init_neo4j.cypher 初始化脚本；rag_service.py 中通过 py2neo 执行 Cypher 查询。</p></td></tr>
+<tr><td><p>Redis</p></td><td><p>Remote Dictionary Server</p></td><td><p>开源内存键值数据库，支持字符串、哈希、列表、集合、有序集合等数据结构，性能极高，常用于缓存、会话存储、消息队列。</p></td><td><p>版本 7-alpine，用于多 Agent 会话状态存储（可回退到进程内存）。</p></td></tr>
+<tr><td><p>ORM</p></td><td><p>Object-Relational Mapping</p></td><td><p>对象关系映射，一种编程技术，将面向对象语言中的类与数据库表映射，通过操作对象实现数据库操作，无需手写 SQL。</p></td><td><p>Flask-SQLAlchemy 提供 ORM 能力，模型定义在 backend/app/models/。</p></td></tr>
+<tr><td><p>SQLAlchemy</p></td><td><p>SQLAlchemy</p></td><td><p>Python 最流行的 SQL 工具包和 ORM 框架，提供 Core（SQL 表达式语言）和 ORM（对象关系映射）两套 API。</p></td><td><p>Flask-SQLAlchemy 3.1.1 基于 SQLAlchemy，管理 MySQL 数据模型。</p></td></tr>
+<tr><td><p>数据库迁移</p></td><td><p>Database Migration</p></td><td><p>管理数据库表结构变更版本的技术，通过迁移脚本记录每次 schema 变更，支持升级和回滚，保证开发/生产环境表结构一致。</p></td><td><p>Flask-Migrate 4.0.7（基于 Alembic），管理 MySQL 表结构变更。</p></td></tr>
+<tr><td><p>连接池</p></td><td><p>Connection Pool</p></td><td><p>预先创建并维护一组数据库连接，请求到来时复用已有连接而非新建，避免频繁建立/销毁连接的开销，提升并发性能。</p></td><td><p>SQLAlchemy 和 py2neo 内部均维护数据库连接池。</p></td></tr>
+<tr><td><p>py2neo</p></td><td><p>py2neo</p></td><td><p>Python 操作 Neo4j 的客户端库，提供 Graph 对象、节点/关系的 OGM（对象图映射）、Cypher 执行、事务管理等功能。</p></td><td><p>版本 2021.2.4，后端通过 py2neo 连接和查询 Neo4j。</p></td></tr>
+<tr><td><p>PyMySQL</p></td><td><p>PyMySQL</p></td><td><p>纯 Python 实现的 MySQL 客户端库，兼容 MySQLdb 接口，支持 Python 3，无需编译 C 扩展。</p></td><td><p>版本 1.1.0，SQLAlchemy 的 MySQL 驱动，连接串为 mysql+pymysql://。</p></td></tr>
+</tbody>
+</table>
+
+<h2 seq="auto">AI 与大模型技术</h2>
+
+<table>
+<colgroup><col width="130"/><col width="170"/><col width="290"/><col width="230"/></colgroup>
+<thead><tr><th background-color="light-gray"><p>术语</p></th><th background-color="light-gray"><p>英文 / 缩写</p></th><th background-color="light-gray"><p>解释</p></th><th background-color="light-gray"><p>本项目中的应用</p></th></tr></thead>
+<tbody>
+<tr><td><p>大语言模型</p></td><td><p>Large Language Model, LLM</p></td><td><p>基于 Transformer 架构、在海量文本上预训练的深度学习模型，具备文本生成、理解、翻译、推理等能力，参数量通常在数十亿以上。</p></td><td><p>Qwen2.5-3B-Instruct 作为核心推理引擎，支持 AI 解释、追问、多 Agent 问诊。</p></td></tr>
+<tr><td><p>Qwen2.5</p></td><td><p>通义千问 Qwen2.5</p></td><td><p>阿里巴巴通义实验室开源的大语言模型系列，覆盖 0.5B 到 72B 参数量，支持多语言、代码、数学等能力，Instruct 版本经过指令微调。</p></td><td><p>使用 Qwen2.5-3B-Instruct，30 亿参数，可在普通 CPU/GPU 上本地运行。</p></td></tr>
+<tr><td><p>Transformers</p></td><td><p>HuggingFace Transformers</p></td><td><p>HuggingFace 开源的 NLP 库，提供数千种预训练模型的统一加载和调用接口，支持 PyTorch/TensorFlow/JAX，是大模型应用的事实标准。</p></td><td><p>版本 4.45.2，本地模式下加载 Qwen2.5 模型权重进行推理。</p></td></tr>
+<tr><td><p>PyTorch</p></td><td><p>PyTorch</p></td><td><p>Facebook 开源的深度学习框架，基于动态计算图，Python 风格 API，支持自动微分、GPU 加速，是学术界和工业界最主流的深度学习框架之一。</p></td><td><p>版本 2.5.0（CUDA 12.1），Transformers 和 sentence-transformers 的底层计算框架。</p></td></tr>
+<tr><td><p>accelerate</p></td><td><p>HuggingFace Accelerate</p></td><td><p>HuggingFace 推出的分布式训练/推理工具库，简化多 GPU、TPU、混合精度等配置，只需少量代码改动即可实现分布式运行。</p></td><td><p>版本 0.33.0，配合 Transformers 加速大模型加载和推理。</p></td></tr>
+<tr><td><p>量化</p></td><td><p>Quantization</p></td><td><p>将模型权重从高精度（如 FP32）转换为低精度（如 INT8、INT4）的技术，可大幅减少显存占用和推理延迟，精度损失通常可控。</p></td><td><p>bitsandbytes 0.43.3 支持 4bit/8bit 量化，降低 Qwen2.5 运行的硬件门槛。</p></td></tr>
+<tr><td><p>分词器</p></td><td><p>Tokenizer / SentencePiece</p></td><td><p>将文本切分为模型可处理的最小单元（token）的组件，常见算法有 BPE、WordPiece、Unigram；SentencePiece 是 Google 开源的无监督分词器。</p></td><td><p>sentencepiece 0.1.99，Qwen2.5 模型的分词依赖。</p></td></tr>
+<tr><td><p>Ollama</p></td><td><p>Ollama</p></td><td><p>开源的本地大语言模型运行工具，一键下载和运行各种开源 LLM，提供 REST API，支持模型管理、自定义 Modelfile、GPU 加速。</p></td><td><p>Docker 中部署 Ollama 服务，拉取 qwen2.5:3b 模型，后端通过 HTTP API 调用。</p></td></tr>
+<tr><td><p>LangChain</p></td><td><p>LangChain</p></td><td><p>用于构建大语言模型应用的开发框架，提供链式调用、文档加载、向量检索、Agent、工具调用、记忆等模块化组件，简化 LLM 应用开发。</p></td><td><p>版本 0.3.4，编排多 Agent 对话、RAG 检索链、Ollama 模型接入。</p></td></tr>
+<tr><td><p>RAG</p></td><td><p>Retrieval-Augmented Generation</p></td><td><p>检索增强生成，一种结合信息检索和大模型生成的技术：先从知识库中检索相关文档，再将检索结果作为上下文喂给 LLM 生成答案，有效减少幻觉并补充私有知识。</p></td><td><p>backend/app/services/rag/ 实现完整 RAG 链路，从中医案例库检索相似案例辅助体质推理。</p></td></tr>
+<tr><td><p>向量嵌入</p></td><td><p>Embedding</p></td><td><p>将文本、图像等非结构化数据转换为高维稠密向量的技术，语义相似的内容在向量空间中距离更近，是语义检索和 RAG 的基础。</p></td><td><p>使用 bge-small-zh-v1.5 模型将中医案例文本转为向量，存入 FAISS 索引。</p></td></tr>
+<tr><td><p>句向量模型</p></td><td><p>sentence-transformers</p></td><td><p>基于 Siamese 网络和三元组损失训练的句子/段落嵌入模型框架，可生成语义丰富的固定长度向量，适用于语义搜索、聚类、相似度计算。</p></td><td><p>版本 3.3.1，加载 BAAI/bge-small-zh-v1.5 生成中文句向量。</p></td></tr>
+<tr><td><p>bge-small-zh</p></td><td><p>BAAI bge-small-zh-v1.5</p></td><td><p>智源研究院（BAAI）开源的中文通用向量模型系列，bge-small 为轻量版（约 24M 参数），在中文语义检索任务上表现优秀，v1.5 为优化版本。</p></td><td><p>作为 RAG 链路的句向量模型，体积小、速度快，适合离线部署。</p></td></tr>
+<tr><td><p>FAISS</p></td><td><p>Facebook AI Similarity Search</p></td><td><p>Facebook 开源的向量相似度检索库，支持暴力检索和多种近似最近邻（ANN）索引（如 IVF、HNSW、PQ），可在亿级向量上实现毫秒级检索。</p></td><td><p>faiss-cpu 1.9.0，存储和检索中医案例向量库，支持持久化到磁盘。</p></td></tr>
+<tr><td><p>向量检索</p></td><td><p>Vector Search / ANN</p></td><td><p>在向量空间中查找与查询向量最相似的 Top-K 个向量的技术，近似最近邻（ANN）通过索引结构在精度和速度间取得平衡，是 RAG 和推荐系统的核心。</p></td><td><p>RAG 案例检索器使用 FAISS 进行 Top-K（默认 K=3）相似案例召回。</p></td></tr>
+<tr><td><p>多 Agent 架构</p></td><td><p>Multi-Agent Architecture</p></td><td><p>将复杂任务分解给多个具有不同角色和能力的智能体协同完成的架构模式，每个 Agent 专注特定子任务，通过主控 Agent 调度和仲裁，提升任务分解能力和结果质量。</p></td><td><p>症状 Agent → 体质 Agent → 方案 Agent 三级协同，Master Agent 主控仲裁。</p></td></tr>
+<tr><td><p>Function Calling</p></td><td><p>Function Calling / Tool Use</p></td><td><p>大模型根据用户意图自动选择并调用外部函数/工具的能力，模型输出结构化的函数名和参数，由应用层执行后将结果返回模型继续推理，扩展 LLM 的能力边界。</p></td><td><p>base_agent.py 实现 Function Calling 循环，工具注册表管理图谱/穴位/RAG 工具，最多 3 轮。</p></td></tr>
+<tr><td><p>思维链</p></td><td><p>Chain-of-Thought, CoT</p></td><td><p>一种提示工程技术，通过在提示中加入"让我们一步步思考"或提供推理步骤示例，引导大模型输出中间推理过程，显著提升复杂推理任务的准确率。</p></td><td><p>cot_templates.py 中为三级 Agent 设计了 CoT Few-shot 提示词模板。</p></td></tr>
+<tr><td><p>Few-shot 提示</p></td><td><p>Few-shot Prompting</p></td><td><p>在提示词中提供少量（通常 1-5 个）输入-输出示例，让模型通过示例学习任务模式和输出格式，无需微调即可适配特定任务。</p></td><td><p>各 Agent 的提示词模板中包含中医问诊的 Few-shot 示例。</p></td></tr>
+<tr><td><p>置信度门控</p></td><td><p>Confidence Gating</p></td><td><p>让模型在输出结论的同时给出置信度分数，当分数低于预设阈值时不直接给出答案，而是触发澄清追问或拒答，避免在不确定时误导用户。</p></td><td><p>confidence.py 实现，阈值默认 0.6，体质推理置信度不足时触发澄清。</p></td></tr>
+<tr><td><p>幻觉抑制</p></td><td><p>Hallucination Suppression / Grounding</p></td><td><p>通过检索增强、实体锚定、事实校验等技术减少大模型生成虚假信息（幻觉）的方法，确保输出内容可追溯到可信知识源。</p></td><td><p>grounding.py 实现实体锚定，将方案中的食材/穴位等实体校验到知识图谱中。</p></td></tr>
+<tr><td><p>实体锚定</p></td><td><p>Entity Grounding / Entity Linking</p></td><td><p>将文本中提到的实体（如人名、地名、药物名）链接到知识库中对应实体的技术，确保生成内容中的实体真实存在且属性准确。</p></td><td><p>方案生成后，grounding.py 检查所有推荐实体是否存在于 Neo4j 知识图谱中。</p></td></tr>
+<tr><td><p>MCP</p></td><td><p>Model Context Protocol</p></td><td><p>Anthropic 提出的开放协议，为大模型应用提供标准化的工具/上下文接入方式，支持 stdio 和 SSE 传输，使 LLM 能以统一方式调用外部数据源和工具。</p></td><td><p>mcp 1.2.0，独立 MCP Server 通过 stdio 暴露 4 个工具，后端以子进程方式接入。</p></td></tr>
+<tr><td><p>Token</p></td><td><p>Token</p></td><td><p>大语言模型处理文本的基本单位，一个 token 可以是一个词、子词或字符，中文通常 1-2 个字符对应一个 token；模型输入输出长度和计费均以 token 计。</p></td><td><p>tiktoken 库用于 token 计数；token_usage.py 统计每次对话的 token 消耗和成本。</p></td></tr>
+<tr><td><p>推理延迟</p></td><td><p>Inference Latency</p></td><td><p>从发送请求到收到模型完整响应的时间，包括首 token 延迟（TTFT）和生成总时长，是衡量 LLM 服务性能的核心指标。</p></td><td><p>config.py 中 INFERENCE_LATENCY_TARGET 默认 3 秒；evaluation.py 评测延迟指标。</p></td></tr>
+<tr><td><p>工具注册表</p></td><td><p>Tool Registry</p></td><td><p>统一管理所有可被 LLM 调用的工具的注册中心，负责工具元数据描述、调用分发、超时控制、重试机制和日志记录，支持 MCP/本地双模式。</p></td><td><p>tools/registry.py 实现，管理 kg_tools、acupoint_tools、rag_tools 等工具。</p></td></tr>
+<tr><td><p>降级机制</p></td><td><p>Fallback / Graceful Degradation</p></td><td><p>当核心依赖（如数据库、模型服务）不可用时，系统自动切换到备用方案（如静态底库、缓存、简化逻辑），保证基本功能可用而非直接崩溃。</p></td><td><p>kg_fallback.py（Neo4j 不可用时用静态知识底库）、Ollama 不可用时回退本地 Transformers。</p></td></tr>
+</tbody>
+</table>
+
+<h2 seq="auto">安全与认证</h2>
+
+<table>
+<colgroup><col width="120"/><col width="160"/><col width="300"/><col width="240"/></colgroup>
+<thead><tr><th background-color="light-gray"><p>术语</p></th><th background-color="light-gray"><p>英文 / 缩写</p></th><th background-color="light-gray"><p>解释</p></th><th background-color="light-gray"><p>本项目中的应用</p></th></tr></thead>
+<tbody>
+<tr><td><p>JWT</p></td><td><p>JSON Web Token</p></td><td><p>一种紧凑的、URL 安全的令牌格式，由 Header.Payload.Signature 三部分组成，用于在客户端和服务端之间安全传递身份信息，服务端无需存储会话。</p></td><td><p>PyJWT 2.9.0，用户登录后签发 JWT，后续请求在 Header 中携带进行鉴权。</p></td></tr>
+<tr><td><p>密码哈希</p></td><td><p>Password Hashing</p></td><td><p>使用单向哈希函数（如 bcrypt、scrypt、Argon2）将密码转换为不可逆的哈希值存储，即使数据库泄露也无法还原原始密码，通常配合盐值（salt）使用。</p></td><td><p>security.py 中实现密码哈希和校验，用户密码不以明文存储。</p></td></tr>
+<tr><td><p>鉴权装饰器</p></td><td><p>Auth Decorator</p></td><td><p>Python 装饰器模式在 Web 路由中的应用，在视图函数执行前检查请求中的令牌是否有效，无效则返回 401，有效则将用户信息注入请求上下文。</p></td><td><p>security.py 中的 @token_required 装饰器，保护需要登录的 API 端点。</p></td></tr>
+<tr><td><p>环境变量</p></td><td><p>Environment Variables / .env</p></td><td><p>操作系统级别的键值对配置，应用通过读取环境变量获取敏感信息（如密码、密钥、数据库地址），避免硬编码在代码中，.env 文件是常用的本地管理方式。</p></td><td><p>python-dotenv 加载 backend/.env；config.py 全部配置均从环境变量读取。</p></td></tr>
+</tbody>
+</table>
+
+<h2 seq="auto">部署与运维</h2>
+
+<table>
+<colgroup><col width="120"/><col width="160"/><col width="300"/><col width="240"/></colgroup>
+<thead><tr><th background-color="light-gray"><p>术语</p></th><th background-color="light-gray"><p>英文 / 缩写</p></th><th background-color="light-gray"><p>解释</p></th><th background-color="light-gray"><p>本项目中的应用</p></th></tr></thead>
+<tbody>
+<tr><td><p>Docker</p></td><td><p>Docker</p></td><td><p>开源容器化平台，将应用及其依赖打包为轻量级、可移植的容器镜像，实现"一次构建，到处运行"，解决环境不一致问题。</p></td><td><p>MySQL、Neo4j、Ollama、Redis、后端、前端均以 Docker 容器运行。</p></td></tr>
+<tr><td><p>容器</p></td><td><p>Container</p></td><td><p>一种操作系统级虚拟化技术，在单个操作系统内核上运行多个隔离的用户空间实例，相比虚拟机更轻量、启动更快、资源占用更少。</p></td><td><p>docker-compose.yml 定义了 7 个服务容器。</p></td></tr>
+<tr><td><p>镜像</p></td><td><p>Docker Image</p></td><td><p>容器的只读模板，包含运行应用所需的代码、运行时、库、环境变量和配置文件，由 Dockerfile 构建，可版本化管理和分发。</p></td><td><p>backend/Dockerfile 和 frontend/Dockerfile 分别构建后端和前端镜像。</p></td></tr>
+<tr><td><p>Docker Compose</p></td><td><p>Docker Compose</p></td><td><p>用于定义和运行多容器 Docker 应用的工具，通过 YAML 文件配置服务、网络和卷，一条命令即可启动/停止整个应用栈。</p></td><td><p>docker-compose.yml 编排全部 7 个服务，支持一键部署。</p></td></tr>
+<tr><td><p>数据卷</p></td><td><p>Docker Volume</p></td><td><p>Docker 中用于持久化数据的机制，将容器内目录映射到宿主机或命名卷，容器删除后数据仍保留，支持多容器共享。</p></td><td><p>mysql_data、neo4j_data、redis_data、ollama_data、backend_logs 等命名卷。</p></td></tr>
+<tr><td><p>Nginx</p></td><td><p>Nginx</p></td><td><p>高性能的 Web 服务器和反向代理服务器，支持静态文件服务、负载均衡、SSL 终止、gzip 压缩等，常用于前端生产部署。</p></td><td><p>前端 Dockerfile 基于 Nginx，将构建产物作为静态文件托管，监听 80 端口。</p></td></tr>
+<tr><td><p>健康检查</p></td><td><p>Health Check</p></td><td><p>定期检测容器/服务是否正常运行的机制，Docker 通过 HEALTHCHECK 指令判断容器状态，编排工具据此决定是否重启或流量切换。</p></td><td><p>每个服务均配置 healthcheck，后端检查 /health 端点，MySQL 用 mysqladmin ping。</p></td></tr>
+<tr><td><p>结构化日志</p></td><td><p>Structured Logging / JSON Log</p></td><td><p>将日志输出为 JSON 格式而非纯文本，每条日志包含时间、级别、请求 ID、消息等字段，便于机器解析、检索和分析。</p></td><td><p>logging_config.py 配置结构化 JSON 日志 + 文件轮转。</p></td></tr>
+<tr><td><p>请求 ID</p></td><td><p>Request ID / Trace ID</p></td><td><p>为每个 HTTP 请求生成唯一标识符，在日志中贯穿整个请求生命周期，便于在分布式系统中追踪和排查单个请求的问题。</p></td><td><p>middleware.py 为每个请求生成/透传 X-Request-ID，写入日志上下文。</p></td></tr>
+</tbody>
+</table>
+
+<h1 seq="auto">第二部分：技术实战教程</h1>
+
+<h2 seq="auto">环境搭建</h2>
+
+<h3 seq="auto">开发环境准备</h3>
+
+<p>本项目需要以下基础环境，请先确认已安装：</p>
+
+<table>
+<thead><tr><th background-color="light-gray"><p>工具</p></th><th background-color="light-gray"><p>最低版本</p></th><th background-color="light-gray"><p>用途</p></th><th background-color="light-gray"><p>验证命令</p></th></tr></thead>
+<tbody>
+<tr><td><p>Python</p></td><td><p>3.10+</p></td><td><p>后端运行环境</p></td><td><p>python --version</p></td></tr>
+<tr><td><p>Node.js</p></td><td><p>18+</p></td><td><p>前端构建和开发</p></td><td><p>node --version</p></td></tr>
+<tr><td><p>npm</p></td><td><p>9+</p></td><td><p>前端包管理</p></td><td><p>npm --version</p></td></tr>
+<tr><td><p>MySQL</p></td><td><p>8.0</p></td><td><p>结构化数据存储</p></td><td><p>mysql --version</p></td></tr>
+<tr><td><p>Neo4j</p></td><td><p>4.4+</p></td><td><p>知识图谱存储</p></td><td><p>cypher-shell --version</p></td></tr>
+<tr><td><p>Git</p></td><td><p>2.0+</p></td><td><p>版本控制</p></td><td><p>git --version</p></td></tr>
+</tbody>
+</table>
+
+<h3 seq="auto">后端环境搭建</h3>
+
+<p>以下步骤在项目根目录的 <code>backend/</code> 下执行：</p>
+
+<ol>
+<li><p>创建并激活虚拟环境：</p>
+<pre lang="bash"><code>cd backend
+python -m venv venv
+# Windows
+venv\Scripts\activate
+# macOS/Linux
+source venv/bin/activate</code></pre>
+</li>
+<li><p>安装依赖：</p>
+<pre lang="bash"><code>pip install -r requirements.txt</code></pre>
+<callout emoji="⚠️" background-color="light-yellow" border-color="yellow"><p>requirements.txt 中包含 CUDA 版 PyTorch（cu121）。如果没有 NVIDIA GPU，可先安装 CPU 版 PyTorch，再安装其余依赖，或使用 Docker 部署。</p></callout>
+</li>
+<li><p>配置环境变量。复制 <code>.env.example</code> 为 <code>.env</code>，根据实际情况修改数据库连接、Neo4j 密码、模型路径等：</p>
+<pre lang="bash"><code>copy .env.example .env</code></pre>
+</li>
+<li><p>初始化数据库。确保 MySQL 和 Neo4j 已启动，然后执行初始化脚本：</p>
+<pre lang="bash"><code># MySQL 初始化（在 MySQL 客户端中执行）
+source ../data/init_mysql.sql
+
+# Neo4j 初始化（在 Neo4j Browser 或 cypher-shell 中执行）
+# 导入 data/init_neo4j.cypher</code></pre>
+</li>
+<li><p>启动后端服务：</p>
+<pre lang="bash"><code>python run.py</code></pre>
+<p>默认监听 <code>http://127.0.0.1:5000</code>，访问 <code>/health</code> 验证服务存活。</p>
+</li>
+</ol>
+
+<h3 seq="auto">前端环境搭建</h3>
+
+<ol>
+<li><p>进入前端目录并安装依赖：</p>
+<pre lang="bash"><code>cd frontend
+npm install</code></pre>
+</li>
+<li><p>启动开发服务器：</p>
+<pre lang="bash"><code>npm run dev</code></pre>
+<p>默认地址为 <code>http://127.0.0.1:5173</code>，Vite 已配置 <code>/api</code> 代理到后端 5000 端口。</p>
+</li>
+<li><p>生产构建：</p>
+<pre lang="bash"><code>npm run build</code></pre>
+<p>构建产物输出到 <code>frontend/dist/</code> 目录。</p>
+</li>
+</ol>
+
+<h3 seq="auto">Docker 一键部署</h3>
+
+<p>如果已安装 Docker 和 Docker Compose，可跳过手动环境配置，直接一键启动全部服务：</p>
+
+<pre lang="bash"><code>docker compose up -d --build</code></pre>
+
+<p>启动后访问地址：</p>
+<ul>
+<li><p>前端：<code>http://localhost</code></p></li>
+<li><p>后端 API：<code>http://localhost:5000</code></p></li>
+<li><p>Neo4j Browser：<code>http://localhost:7474</code></p></li>
+</ul>
+
+<callout emoji="💡" background-color="light-green" border-color="green"><p>首次启动时，ollama-init 容器会自动拉取 qwen2.5:3b 模型（约 5-10 分钟），kg-init 容器会自动导入知识图谱。后端健康检查的 start_period 设为 90 秒以等待模型和 RAG 索引加载完成。</p></callout>
+
+<h2 seq="auto">后端开发教程</h2>
+
+<h3 seq="auto">Flask 应用工厂与蓝图</h3>
+
+<p>本项目使用应用工厂模式创建 Flask 应用，核心在 <code>backend/app/__init__.py</code>：</p>
+
+<pre lang="python"><code>from flask import Flask
+from flask_cors import CORS
+from flask_sqlalchemy import SQLAlchemy
+from flask_migrate import Migrate
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+
+db = SQLAlchemy()
+migrate = Migrate()
+limiter = Limiter(key_func=get_remote_address)
+
+def create_app(config_object='app.config.Config'):
+    app = Flask(__name__)
+    app.config.from_object(config_object)
+
+    # 初始化扩展
+    db.init_app(app)
+    migrate.init_app(app, db)
+    limiter.init_app(app)
+    CORS(app, resources={r"/api/*": {"origins": app.config['CORS_ORIGINS']}})
+
+    # 注册蓝图
+    from app.routes.auth import auth_bp
+    from app.routes.assessment import assessment_bp
+    from app.routes.agents import agents_bp
+    app.register_blueprint(auth_bp, url_prefix='/api/auth')
+    app.register_blueprint(assessment_bp, url_prefix='/api/assessment')
+    app.register_blueprint(agents_bp, url_prefix='/api/agents')
+
+    return app</code></pre>
+
+<p>新增 API 接口时，在对应蓝图文件中添加路由，路由只做参数校验和调用服务层：</p>
+
+<pre lang="python"><code>from flask import Blueprint, request, jsonify
+from app.services.constitution import calculate_constitution
+from app.utils.security import token_required
+
+assessment_bp = Blueprint('assessment', __name__)
+
+@assessment_bp.route('/submit', methods=['POST'])
+@token_required
+def submit_assessment():
+    data = request.get_json()
+    if not data or 'answers' not in data:
+        return jsonify({'error': '缺少 answers 字段'}), 400
+    result = calculate_constitution(data['answers'])
+    return jsonify(result), 200</code></pre>
+
+<h3 seq="auto">SQLAlchemy 模型定义</h3>
+
+<p>数据模型定义在 <code>backend/app/models/</code>，使用 Flask-SQLAlchemy 的 ORM：</p>
+
+<pre lang="python"><code>from datetime import datetime
+from app import db
+
+class User(db.Model):
+    __tablename__ = 'users'
+
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    password_hash = db.Column(db.String(256), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # 一对多关系
+    assessments = db.relationship('AssessmentResult', backref='user', lazy=True)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'username': self.username,
+            'created_at': self.created_at.isoformat()
+        }</code></pre>
+
+<p>常用 ORM 操作：</p>
+
+<pre lang="python"><code># 新增
+user = User(username='test', password_hash='xxx')
+db.session.add(user)
+db.session.commit()
+
+# 查询
+user = User.query.filter_by(username='test').first()
+users = User.query.order_by(User.created_at.desc()).limit(10).all()
+
+# 更新
+user.username = 'new_name'
+db.session.commit()
+
+# 删除
+db.session.delete(user)
+db.session.commit()</code></pre>
+
+<h3 seq="auto">Neo4j 图谱查询</h3>
+
+<p>通过 py2neo 连接 Neo4j 并执行 Cypher 查询：</p>
+
+<pre lang="python"><code>from py2neo import Graph
+from app.config import Config
+
+graph = Graph(
+    Config.NEO4J_URI,
+    auth=(Config.NEO4J_USER, Config.NEO4J_PASSWORD)
+)
+
+# 查询某体质宜食的食材
+def get_recommended_foods(constitution_name):
+    cypher = """
+    MATCH (c:Constitution {name: $name})-[:RECOMMENDS]->(f:Food)
+    RETURN f.name AS name, f.effect AS effect
+    """
+    result = graph.run(cypher, name=constitution_name)
+    return [dict(record) for record in result]
+
+# 查询穴位关联
+def get_acupoints_for_symptom(symptom):
+    cypher = """
+    MATCH (s:Symptom {name: $symptom})<-[:TREATS]-(a:Acupoint)
+    RETURN a.name AS name, a.location AS location, a.method AS method
+    """
+    return [dict(r) for r in graph.run(cypher, symptom=symptom)]</code></pre>
+
+<h3 seq="auto">中间件与统一错误处理</h3>
+
+<p><code>backend/app/middleware.py</code> 实现请求 ID 注入和统一错误响应：</p>
+
+<pre lang="python"><code>import uuid
+import logging
+from flask import request, jsonify, g
+
+logger = logging.getLogger(__name__)
+
+def register_middleware(app):
+    @app.before_request
+    def before_request():
+        # 生成或透传请求 ID
+        request_id = request.headers.get('X-Request-ID', str(uuid.uuid4()))
+        g.request_id = request_id
+        logger.info(f"[{request_id}] {request.method} {request.path}")
+
+    @app.after_request
+    def after_request(response):
+        response.headers['X-Request-ID'] = getattr(g, 'request_id', '')
+        return response
+
+    @app.errorhandler(Exception)
+    def handle_exception(e):
+        request_id = getattr(g, 'request_id', '')
+        logger.error(f"[{request_id}] Unhandled exception: {e}", exc_info=True)
+        return jsonify({
+            'error': '服务器内部错误',
+            'request_id': request_id
+        }), 500</code></pre>
+
+<h2 seq="auto">前端开发教程</h2>
+
+<h3 seq="auto">Vue 3 组件基础（Composition API）</h3>
+
+<p>使用 <code>&lt;script setup&gt;</code> 语法编写组件：</p>
+
+<pre lang="vue"><code>&lt;template&gt;
+  &lt;div class="p-4"&gt;
+    &lt;h2 class="text-xl font-bold mb-4"&gt;{{ title }}&lt;/h2&gt;
+    &lt;ul&gt;
+      &lt;li v-for="item in items" :key="item.id" class="mb-2"&gt;
+        {{ item.name }}
+      &lt;/li&gt;
+    &lt;/ul&gt;
+    &lt;button @click="loadData" class="px-4 py-2 bg-blue-500 text-white rounded"&gt;
+      刷新
+    &lt;/button&gt;
+  &lt;/div&gt;
+&lt;/template&gt;
+
+&lt;script setup&gt;
+import { ref, onMounted } from 'vue'
+import { fetchItems } from '@/api'
+
+// props 定义
+const props = defineProps({
+  title: {
+    type: String,
+    default: '列表'
+  }
+})
+
+// 响应式状态
+const items = ref([])
+
+// 方法
+const loadData = async () =&gt; {
+  try {
+    const res = await fetchItems()
+    items.value = res.data
+  } catch (err) {
+    console.error('加载失败', err)
+  }
+}
+
+// 生命周期
+onMounted(() =&gt; {
+  loadData()
+})
+&lt;/script&gt;</code></pre>
+
+<h3 seq="auto">Pinia 状态管理</h3>
+
+<p>定义 Store（<code>frontend/src/store/user.js</code>）：</p>
+
+<pre lang="javascript"><code>import { defineStore } from 'pinia'
+import { ref, computed } from 'vue'
+import { login as apiLogin } from '@/api'
+
+export const useUserStore = defineStore('user', () =&gt; {
+  // state
+  const token = ref(localStorage.getItem('token') || '')
+  const userInfo = ref(null)
+
+  // getters
+  const isLoggedIn = computed(() =&gt; !!token.value)
+
+  // actions
+  const login = async (username, password) =&gt; {
+    const res = await apiLogin(username, password)
+    token.value = res.data.token
+    userInfo.value = res.data.user
+    localStorage.setItem('token', res.data.token)
+    return res.data
+  }
+
+  const logout = () =&gt; {
+    token.value = ''
+    userInfo.value = null
+    localStorage.removeItem('token')
+  }
+
+  return { token, userInfo, isLoggedIn, login, logout }
+})</code></pre>
+
+<p>在组件中使用：</p>
+
+<pre lang="javascript"><code>import { useUserStore } from '@/store/user'
+const userStore = useUserStore()
+
+// 访问 state
+console.log(userStore.isLoggedIn)
+
+// 调用 action
+await userStore.login('username', 'password')</code></pre>
+
+<h3 seq="auto">Vue Router 路由配置</h3>
+
+<p><code>frontend/src/router/index.js</code>：</p>
+
+<pre lang="javascript"><code>import { createRouter, createWebHistory } from 'vue-router'
+import { useUserStore } from '@/store/user'
+
+const routes = [
+  {
+    path: '/login',
+    name: 'Login',
+    component: () =&gt; import('@/views/Login.vue'),
+    meta: { requiresAuth: false }
+  },
+  {
+    path: '/assessment',
+    name: 'Assessment',
+    component: () =&gt; import('@/views/Assessment.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/result/:id',
+    name: 'Result',
+    component: () =&gt; import('@/views/Result.vue'),
+    meta: { requiresAuth: true }
+  }
+]
+
+const router = createRouter({
+  history: createWebHistory(),
+  routes
+})
+
+// 路由守卫
+router.beforeEach((to, from, next) =&gt; {
+  const userStore = useUserStore()
+  if (to.meta.requiresAuth &amp;&amp; !userStore.isLoggedIn) {
+    next('/login')
+  } else {
+    next()
+  }
+})
+
+export default router</code></pre>
+
+<h3 seq="auto">Axios API 封装</h3>
+
+<p><code>frontend/src/api/index.js</code>：</p>
+
+<pre lang="javascript"><code>import axios from 'axios'
+
+const api = axios.create({
+  baseURL: '/api',
+  timeout: 30000
+})
+
+// 请求拦截器：自动添加 token
+api.interceptors.request.use(
+  (config) =&gt; {
+    const token = localStorage.getItem('token')
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`
+    }
+    return config
+  },
+  (error) =&gt; Promise.reject(error)
+)
+
+// 响应拦截器：统一错误处理
+api.interceptors.response.use(
+  (response) =&gt; response.data,
+  (error) =&gt; {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('token')
+      window.location.href = '/login'
+    }
+    return Promise.reject(error)
+  }
+)
+
+// 具体 API
+export const login = (username, password) =&gt;
+  api.post('/auth/login', { username, password })
+
+export const submitAssessment = (answers) =&gt;
+  api.post('/assessment/submit', { answers })
+
+export const getAssessmentHistory = () =&gt;
+  api.get('/assessment/history')
+
+export default api</code></pre>
+
+<h3 seq="auto">ECharts 雷达图集成</h3>
+
+<p>体质结果页使用 ECharts 雷达图展示九种体质得分：</p>
+
+<pre lang="vue"><code>&lt;template&gt;
+  &lt;div ref="chartRef" style="width: 100%; height: 400px;"&gt;&lt;/div&gt;
+&lt;/template&gt;
+
+&lt;script setup&gt;
+import { ref, onMounted, onUnmounted, watch } from 'vue'
+import * as echarts from 'echarts'
+
+const props = defineProps({
+  scores: {
+    type: Object,
+    required: true
+  }
+})
+
+const chartRef = ref(null)
+let chartInstance = null
+
+const renderChart = () =&gt; {
+  if (!chartRef.value) return
+  chartInstance = echarts.init(chartRef.value)
+
+  const indicators = Object.keys(props.scores).map(name =&gt; ({
+    name,
+    max: 100
+  }))
+
+  const option = {
+    tooltip: {},
+    radar: {
+      indicator: indicators,
+      radius: '65%'
+    },
+    series: [{
+      type: 'radar',
+      data: [{
+        value: Object.values(props.scores),
+        name: '体质得分',
+        areaStyle: { opacity: 0.3 }
+      }]
+    }]
+  }
+
+  chartInstance.setOption(option)
+}
+
+const handleResize = () =&gt; chartInstance?.resize()
+
+onMounted(() =&gt; {
+  renderChart()
+  window.addEventListener('resize', handleResize)
+})
+
+onUnmounted(() =&gt; {
+  window.removeEventListener('resize', handleResize)
+  chartInstance?.dispose()
+})
+
+watch(() =&gt; props.scores, renderChart, { deep: true })
+&lt;/script&gt;</code></pre>
+
+<h2 seq="auto">AI 功能开发教程</h2>
+
+<h3 seq="auto">Ollama 本地模型部署</h3>
+
+<p>安装 Ollama 后，拉取并运行 Qwen2.5-3B 模型：</p>
+
+<pre lang="bash"><code># 拉取模型
+ollama pull qwen2.5:3b
+
+# 验证模型
+ollama list
+
+# 命令行测试
+ollama run qwen2.5:3b "你好，请用一句话介绍中医体质辨识"</code></pre>
+
+<p>通过 REST API 调用：</p>
+
+<pre lang="bash"><code>curl http://localhost:11434/api/generate -d '{
+  "model": "qwen2.5:3b",
+  "prompt": "气虚体质的特征是什么？",
+  "stream": false
+}'</code></pre>
+
+<h3 seq="auto">LangChain 集成 Ollama</h3>
+
+<pre lang="python"><code>from langchain_ollama import OllamaLLM
+from langchain.prompts import PromptTemplate
+from langchain.chains import LLMChain
+
+# 初始化模型
+llm = OllamaLLM(
+    model="qwen2.5:3b",
+    base_url="http://localhost:11434",
+    temperature=0.7,
+    max_tokens=512
+)
+
+# 定义提示模板
+prompt = PromptTemplate(
+    input_variables=["constitution", "question"],
+    template="""你是一位中医养生专家。
+用户体质：{constitution}
+用户问题：{question}
+请结合该体质特点，给出专业的养生建议。"""
+)
+
+# 创建链
+chain = LLMChain(llm=llm, prompt=prompt)
+
+# 调用
+response = chain.run(
+    constitution="气虚质",
+    question="平时容易疲劳，应该怎么调理？"
+)
+print(response)</code></pre>
+
+<h3 seq="auto">RAG 检索增强生成</h3>
+
+<p>本项目 RAG 链路分为三个核心模块：句向量生成、向量存储、案例检索。</p>
+
+<p><strong>1. 句向量生成（embeddings.py）</strong>：</p>
+
+<pre lang="python"><code>from sentence_transformers import SentenceTransformer
+
+class EmbeddingModel:
+    def __init__(self, model_name='BAAI/bge-small-zh-v1.5'):
+        self.model = SentenceTransformer(model_name)
+
+    def encode(self, texts):
+        """将文本列表转换为向量"""
+        return self.model.encode(texts, normalize_embeddings=True)
+
+    def encode_query(self, query):
+        """编码查询（bge 模型查询前需加指令）"""
+        instruction = "为这个句子生成表示以用于检索相关文章："
+        return self.model.encode([instruction + query], normalize_embeddings=True)[0]</code></pre>
+
+<p><strong>2. 向量存储（vector_store.py）</strong>：</p>
+
+<pre lang="python"><code>import numpy as np
+import faiss
+
+class FAISSVectorStore:
+    def __init__(self, dimension=512):
+        self.dimension = dimension
+        # 使用内积索引（向量已归一化时等价于余弦相似度）
+        self.index = faiss.IndexFlatIP(dimension)
+        self.documents = []
+
+    def add_documents(self, documents, embeddings):
+        """添加文档和对应向量"""
+        vectors = np.array(embeddings, dtype='float32')
+        self.index.add(vectors)
+        self.documents.extend(documents)
+
+    def search(self, query_vector, top_k=3):
+        """检索最相似的 top_k 个文档"""
+        query = np.array([query_vector], dtype='float32')
+        scores, indices = self.index.search(query, top_k)
+        results = []
+        for score, idx in zip(scores[0], indices[0]):
+            if idx &gt;= 0:
+                results.append({
+                    'document': self.documents[idx],
+                    'score': float(score)
+                })
+        return results
+
+    def save(self, path):
+        """持久化到磁盘"""
+        faiss.write_index(self.index, f"{path}/index.faiss")
+        import json
+        with open(f"{path}/documents.json", 'w', encoding='utf-8') as f:
+            json.dump(self.documents, f, ensure_ascii=False)
+
+    def load(self, path):
+        """从磁盘加载"""
+        self.index = faiss.read_index(f"{path}/index.faiss")
+        import json
+        with open(f"{path}/documents.json", 'r', encoding='utf-8') as f:
+            self.documents = json.load(f)</code></pre>
+
+<p><strong>3. 案例检索器（case_retriever.py）</strong>：</p>
+
+<pre lang="python"><code>class CaseRetriever:
+    def __init__(self, embedding_model, vector_store):
+        self.embedding_model = embedding_model
+        self.vector_store = vector_store
+
+    def retrieve(self, query, top_k=3):
+        """根据用户症状描述检索相似案例"""
+        query_vector = self.embedding_model.encode_query(query)
+        return self.vector_store.search(query_vector, top_k=top_k)
+
+    def build_context(self, query, top_k=3):
+        """构建 RAG 上下文，供 LLM 使用"""
+        cases = self.retrieve(query, top_k=top_k)
+        context_parts = []
+        for i, case in enumerate(cases, 1):
+            context_parts.append(
+                f"参考案例 {i}（相似度 {case['score']:.2f}）：\n"
+                f"症状：{case['document']['symptoms']}\n"
+                f"体质：{case['document']['constitution']}\n"
+                f"方案：{case['document']['plan']}"
+            )
+        return "\n\n".join(context_parts)</code></pre>
+
+<h3 seq="auto">多 Agent 架构实现</h3>
+
+<p>本项目的多 Agent 采用"主控 + 三级专家"模式，流程如下：</p>
+
+<whiteboard type="mermaid" path="@./multi_agent.mmd"/>
+
+<p><strong>1. Agent 基类（base_agent.py）</strong>：封装 LLM 调用、Function Calling 和 JSON 解析。</p>
+
+<pre lang="python"><code>import json
+from langchain_ollama import OllamaLLM
+from app.config import Config
+
+class BaseAgent:
+    def __init__(self, name, system_prompt, tools=None):
+        self.name = name
+        self.system_prompt = system_prompt
+        self.tools = tools or {}
+        self.llm = OllamaLLM(
+            model=Config.OLLAMA_MODEL,
+            base_url=Config.OLLAMA_BASE_URL,
+            temperature=0.3
+        )
+
+    def _build_messages(self, user_input, context=None):
+        messages = [{"role": "system", "content": self.system_prompt}]
+        if context:
+            messages.append({"role": "system", "content": f"参考信息：\n{context}"})
+        messages.append({"role": "user", "content": user_input})
+        return messages
+
+    def _parse_json_response(self, response):
+        """从模型输出中提取 JSON"""
+        try:
+            # 尝试直接解析
+            return json.loads(response)
+        except json.JSONDecodeError:
+            # 尝试提取 ```json ... ``` 块
+            import re
+            match = re.search(r'```json\s*(.*?)\s*```', response, re.DOTALL)
+            if match:
+                return json.loads(match.group(1))
+            raise
+
+    def run(self, user_input, context=None):
+        messages = self._build_messages(user_input, context)
+        response = self.llm.invoke(
+            "\n".join(m["content"] for m in messages)
+        )
+        return self._parse_json_response(response)</code></pre>
+
+<p><strong>2. 症状 Agent（symptom_agent.py）</strong>：从用户自然语言中提取结构化症状。</p>
+
+<pre lang="python"><code>SYMPTOM_PROMPT = """你是中医症状分析专家。请从用户描述中提取结构化信息，以 JSON 格式输出：
+{
+  "symptoms": ["症状1", "症状2"],
+  "tongue": {"color": "舌色", "coating": "舌苔"},
+  "pulse": "脉象描述",
+  "severity": "轻度/中度/重度",
+  "duration": "持续时间"
+}
+只输出 JSON，不要其他文字。"""
+
+class SymptomAgent(BaseAgent):
+    def __init__(self):
+        super().__init__("symptom", SYMPTOM_PROMPT)
+
+    def analyze(self, user_input):
+        return self.run(user_input)</code></pre>
+
+<p><strong>3. 体质 Agent（constitution_agent.py）</strong>：结合 RAG 案例和 CoT 推理体质，输出置信度。</p>
+
+<pre lang="python"><code>CONSTITUTION_PROMPT = """你是中医体质辨识专家。请根据以下症状信息，一步步推理用户的体质类型。
+
+推理步骤：
+1. 分析主要症状对应的中医病机
+2. 对照九种体质（平和质、气虚质、阳虚质、阴虚质、痰湿质、湿热质、血瘀质、气郁质、特禀质）的特征
+3. 结合参考案例判断最可能的体质
+4. 给出置信度（0-1）
+
+输出 JSON 格式：
+{
+  "constitution": "体质名称",
+  "confidence": 0.0,
+  "reasoning": "推理过程",
+  "secondary": "次要体质（如有）"
+}
+只输出 JSON。"""
+
+class ConstitutionAgent(BaseAgent):
+    def __init__(self, case_retriever):
+        super().__init__("constitution", CONSTITUTION_PROMPT)
+        self.case_retriever = case_retriever
+
+    def infer(self, symptom_data):
+        # 构建 RAG 上下文
+        query = " ".join(symptom_data.get("symptoms", []))
+        context = self.case_retriever.build_context(query, top_k=3)
+        # 调用模型推理
+        result = self.run(json.dumps(symptom_data, ensure_ascii=False), context=context)
+        return result</code></pre>
+
+<p><strong>4. 方案 Agent（plan_agent.py）</strong>：调用图谱工具生成养生方案。</p>
+
+<pre lang="python"><code>PLAN_PROMPT = """你是中医养生方案专家。根据用户体质，生成个性化养生方案。
+可使用以下工具：
+- query_foods(constitution): 查询该体质宜食/忌食食材
+- query_acupoints(constitution): 查询推荐按摩穴位
+- query_exercises(constitution): 查询推荐运动
+
+请先调用工具获取知识图谱中的权威信息，再整合为方案。
+输出 JSON：
+{
+  "diet": {"recommended": [], "avoid": []},
+  "acupoints": [{"name": "", "method": ""}],
+  "exercises": [],
+  "lifestyle": "",
+  "herbal_tea": ""
+}
+只输出 JSON。"""
+
+class PlanAgent(BaseAgent):
+    def __init__(self, tool_registry):
+        super().__init__("plan", PLAN_PROMPT)
+        self.tool_registry = tool_registry
+
+    def generate(self, constitution):
+        # 直接调用工具获取图谱数据（简化版，实际通过 Function Calling 循环）
+        foods = self.tool_registry.call("query_foods", constitution=constitution)
+        acupoints = self.tool_registry.call("query_acupoints", constitution=constitution)
+        exercises = self.tool_registry.call("query_exercises", constitution=constitution)
+
+        context = f"食材：{foods}\n穴位：{acupoints}\n运动：{exercises}"
+        return self.run(constitution, context=context)</code></pre>
+
+<p><strong>5. 主控 Agent（master_agent.py）</strong>：调度三级 Agent，处理置信度门控和会话状态。</p>
+
+<pre lang="python"><code>from app.services.confidence import check_confidence
+from app.services.grounding import validate_entities
+
+class MasterAgent:
+    def __init__(self, symptom_agent, constitution_agent, plan_agent, session_store):
+        self.symptom_agent = symptom_agent
+        self.constitution_agent = constitution_agent
+        self.plan_agent = plan_agent
+        self.session_store = session_store
+
+    def chat(self, session_id, user_input):
+        # 1. 症状分析
+        symptom_data = self.symptom_agent.analyze(user_input)
+
+        # 2. 体质推理
+        constitution_result = self.constitution_agent.infer(symptom_data)
+
+        # 3. 置信度门控
+        if not check_confidence(constitution_result['confidence']):
+            return {
+                "stage": "clarification",
+                "message": "您的症状描述还不够明确，能否补充以下信息：舌象、脉象、症状持续时间？",
+                "confidence": constitution_result['confidence']
+            }
+
+        # 4. 方案生成
+        plan = self.plan_agent.generate(constitution_result['constitution'])
+
+        # 5. 幻觉抑制：实体锚定校验
+        plan = validate_entities(plan)
+
+        # 6. 保存会话状态
+        self.session_store.save(session_id, {
+            "symptoms": symptom_data,
+            "constitution": constitution_result,
+            "plan": plan
+        })
+
+        return {
+            "stage": "plan",
+            "constitution": constitution_result['constitution'],
+            "confidence": constitution_result['confidence'],
+            "plan": plan
+        }</code></pre>
+
+<h3 seq="auto">Function Calling 工具注册</h3>
+
+<p>工具注册表统一管理所有可被 LLM 调用的工具：</p>
+
+<pre lang="python"><code>import time
+import logging
+from app.config import Config
+
+logger = logging.getLogger(__name__)
+
+class ToolRegistry:
+    def __init__(self):
+        self._tools = {}
+
+    def register(self, name, func, description, parameters):
+        """注册工具"""
+        self._tools[name] = {
+            'func': func,
+            'description': description,
+            'parameters': parameters
+        }
+
+    def get_tool_definitions(self):
+        """获取所有工具的 OpenAI 格式定义（供 Function Calling 使用）"""
+        return [
+            {
+                'type': 'function',
+                'function': {
+                    'name': name,
+                    'description': tool['description'],
+                    'parameters': tool['parameters']
+                }
+            }
+            for name, tool in self._tools.items()
+        ]
+
+    def call(self, name, **kwargs):
+        """调用工具，含超时和重试"""
+        if name not in self._tools:
+            raise ValueError(f"工具 {name} 未注册")
+
+        tool = self._tools[name]
+        last_error = None
+
+        for attempt in range(Config.TOOL_MAX_RETRIES):
+            try:
+                start = time.time()
+                result = tool['func'](**kwargs)
+                elapsed = time.time() - start
+                logger.info(f"工具 {name} 调用成功，耗时 {elapsed:.2f}s")
+                return result
+            except Exception as e:
+                last_error = e
+                logger.warning(f"工具 {name} 第 {attempt+1} 次调用失败: {e}")
+                if attempt &lt; Config.TOOL_MAX_RETRIES - 1:
+                    time.sleep(1 * (attempt + 1))
+
+        raise last_error
+
+# 注册示例
+registry = ToolRegistry()
+
+def query_foods(constitution):
+    from py2neo import Graph
+    graph = Graph(Config.NEO4J_URI, auth=(Config.NEO4J_USER, Config.NEO4J_PASSWORD))
+    result = graph.run("""
+        MATCH (c:Constitution {name: $name})-[:RECOMMENDS]->(f:Food)
+        RETURN f.name AS name, f.effect AS effect
+    """, name=constitution)
+    return [dict(r) for r in result]
+
+registry.register(
+    name='query_foods',
+    func=query_foods,
+    description='查询指定体质推荐的食材',
+    parameters={
+        'type': 'object',
+        'properties': {
+            'constitution': {'type': 'string', 'description': '体质名称，如气虚质'}
+        },
+        'required': ['constitution']
+    }
+)</code></pre>
+
+<h3 seq="auto">MCP 协议接入</h3>
+
+<p>MCP（Model Context Protocol）允许以标准化方式将工具暴露给大模型。本项目实现了独立的 MCP Server：</p>
+
+<p><strong>MCP Server（mcp_server/server.py）</strong>：</p>
+
+<pre lang="python"><code">from mcp.server import Server
+from mcp.types import Tool, TextContent
+import asyncio
+
+server = Server("tcm-knowledge-server")
+
+@server.list_tools()
+async def list_tools():
+    return [
+        Tool(
+            name="query_constitution",
+            description="查询体质详情",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "体质名称"}
+                },
+                "required": ["name"]
+            }
+        ),
+        Tool(
+            name="query_acupoint",
+            description="查询穴位信息",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "穴位名称"}
+                },
+                "required": ["name"]
+            }
+        )
+    ]
+
+@server.call_tool()
+async def call_tool(name, arguments):
+    if name == "query_constitution":
+        result = query_constitution_from_neo4j(arguments["name"])
+        return [TextContent(type="text", text=str(result))]
+    elif name == "query_acupoint":
+        result = query_acupoint_from_neo4j(arguments["name"])
+        return [TextContent(type="text", text=str(result))]
+
+# 通过 stdio 运行
+from mcp.server.stdio import stdio_server
+
+async def main():
+    async with stdio_server() as (read_stream, write_stream):
+        await server.run(read_stream, write_stream, server.create_initialization_options())
+
+if __name__ == "__main__":
+    asyncio.run(main())</code></pre>
+
+<p><strong>MCP 客户端（mcp_client.py）</strong>：后端以子进程方式启动 MCP Server 并调用工具。</p>
+
+<pre lang="python"><code">import asyncio
+import sys
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
+
+class MCPClient:
+    def __init__(self, server_script):
+        self.server_params = StdioServerParameters(
+            command=sys.executable,
+            args=[server_script]
+        )
+        self.session = None
+        self._client = None
+
+    async def connect(self):
+        """启动 MCP Server 子进程并建立连接"""
+        self._client = stdio_client(self.server_params)
+        read_stream, write_stream = await self._client.__aenter__()
+        self.session = ClientSession(read_stream, write_stream)
+        await self.session.initialize()
+
+    async def list_tools(self):
+        """列出可用工具"""
+        result = await self.session.list_tools()
+        return result.tools
+
+    async def call_tool(self, name, arguments):
+        """调用工具"""
+        result = await self.session.call_tool(name, arguments)
+        return result.content
+
+    async def close(self):
+        await self.session.__aexit__(None, None, None)
+        await self._client.__aexit__(None, None, None)</code></pre>
+
+<h2 seq="auto">数据库教程</h2>
+
+<h3 seq="auto">MySQL 表结构设计</h3>
+
+<p>核心表结构（摘自 <code>data/init_mysql.sql</code>）：</p>
+
+<pre lang="sql"><code>-- 用户表
+CREATE TABLE users (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(80) NOT NULL UNIQUE,
+    password_hash VARCHAR(256) NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 问卷题目表
+CREATE TABLE questions (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    content TEXT NOT NULL,
+    dimension VARCHAR(50) NOT NULL,  -- 对应体质维度
+    reverse_score BOOLEAN DEFAULT FALSE,
+    sort_order INT DEFAULT 0
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 测评结果表
+CREATE TABLE assessment_results (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    scores JSON NOT NULL,  -- 九种体质得分
+    primary_constitution VARCHAR(50),
+    secondary_constitution VARCHAR(50),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;</code></pre>
+
+<h3 seq="auto">Neo4j 知识图谱构建</h3>
+
+<p>知识图谱的节点和关系定义（摘自 <code>data/init_neo4j.cypher</code>）：</p>
+
+<pre lang="cypher"><code>// 创建体质节点
+CREATE (:Constitution {name: '气虚质', description: '元气不足，疲乏、气短、自汗'});
+CREATE (:Constitution {name: '阳虚质', description: '阳气不足，畏寒怕冷、手足不温'});
+CREATE (:Constitution {name: '阴虚质', description: '阴液亏少，口燥咽干、手足心热'});
+
+// 创建食材节点
+CREATE (:Food {name: '山药', effect: '健脾益胃、滋肾益精', nature: '平', taste: '甘'});
+CREATE (:Food {name: '红枣', effect: '补中益气、养血安神', nature: '温', taste: '甘'});
+
+// 创建穴位节点
+CREATE (:Acupoint {name: '足三里', location: '犊鼻下3寸，胫骨前嵴外一横指', method: '每次按压5-10分钟，每日2次'});
+
+// 创建关系：体质推荐食材
+MATCH (c:Constitution {name: '气虚质'}), (f:Food {name: '山药'})
+CREATE (c)-[:RECOMMENDS {reason: '健脾益气'}]->(f);
+
+// 创建关系：穴位治疗体质
+MATCH (a:Acupoint {name: '足三里'}), (c:Constitution {name: '气虚质'})
+CREATE (a)-[:TREATS]->(c);
+
+// 创建索引（提升查询性能）
+CREATE INDEX FOR (c:Constitution) ON (c.name);
+CREATE INDEX FOR (f:Food) ON (f.name);
+CREATE INDEX FOR (a:Acupoint) ON (a.name);</code></pre>
+
+<h3 seq="auto">Cypher 查询基础</h3>
+
+<table>
+<thead><tr><th background-color="light-gray"><p>查询需求</p></th><th background-color="light-gray"><p>Cypher 语句</p></th></tr></thead>
+<tbody>
+<tr><td><p>查询所有体质</p></td><td><p><code>MATCH (c:Constitution) RETURN c</code></p></td></tr>
+<tr><td><p>查询气虚质推荐的食材</p></td><td><p><code>MATCH (:Constitution {name:'气虚质'})-[:RECOMMENDS]-&gt;(f:Food) RETURN f.name, f.effect</code></p></td></tr>
+<tr><td><p>查询能调理气虚质的穴位</p></td><td><p><code>MATCH (a:Acupoint)-[:TREATS]-&gt;(:Constitution {name:'气虚质'}) RETURN a.name, a.method</code></p></td></tr>
+<tr><td><p>查询某食材适合哪些体质</p></td><td><p><code>MATCH (c:Constitution)-[:RECOMMENDS]-&gt;(:Food {name:'山药'}) RETURN c.name</code></p></td></tr>
+<tr><td><p>统计各节点数量</p></td><td><p><code>MATCH (n) RETURN labels(n)[0] AS label, count(n) AS cnt</code></p></td></tr>
+<tr><td><p>查询体质到穴位的两跳路径</p></td><td><p><code>MATCH path=(c:Constitution)-[:RECOMMENDS|TREATS*1..2]-(a:Acupoint) WHERE c.name='气虚质' RETURN path</code></p></td></tr>
+</tbody>
+</table>
+
+<h3 seq="auto">Redis 会话缓存</h3>
+
+<pre lang="python"><code>import redis
+import json
+from app.config import Config
+
+class SessionStore:
+    def __init__(self):
+        if Config.REDIS_URL:
+            self.client = redis.from_url(Config.REDIS_URL, decode_responses=True)
+            self.use_redis = True
+        else:
+            # 内存 fallback
+            self._store = {}
+            self.use_redis = False
+
+    def save(self, session_id, data, ttl=None):
+        ttl = ttl or Config.SESSION_TTL
+        payload = json.dumps(data, ensure_ascii=False)
+        if self.use_redis:
+            self.client.setex(f"session:{session_id}", ttl, payload)
+        else:
+            self._store[session_id] = payload
+
+    def get(self, session_id):
+        if self.use_redis:
+            data = self.client.get(f"session:{session_id}")
+        else:
+            data = self._store.get(session_id)
+        return json.loads(data) if data else None
+
+    def delete(self, session_id):
+        if self.use_redis:
+            self.client.delete(f"session:{session_id}")
+        else:
+            self._store.pop(session_id, None)</code></pre>
+
+<h2 seq="auto">部署教程</h2>
+
+<h3 seq="auto">后端 Dockerfile</h3>
+
+<pre lang="dockerfile"><code>FROM python:3.11-slim
+
+WORKDIR /app
+
+# 安装系统依赖
+RUN apt-get update &amp;&amp; apt-get install -y --no-install-recommends \
+    gcc \
+    &amp;&amp; rm -rf /var/lib/apt/lists/*
+
+# 安装 Python 依赖（CPU 版，不含本地 Transformers 权重）
+COPY backend/requirements-docker.txt requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 复制应用代码
+COPY backend/ .
+COPY data/ ./data/
+
+# 预下载句向量模型到 HF 缓存
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('BAAI/bge-small-zh-v1.5')"
+
+# 暴露端口
+EXPOSE 5000
+
+# Gunicorn 单 worker 启动（会话状态在进程内存）
+CMD ["gunicorn", "-w", "1", "-b", "0.0.0.0:5000", "--timeout", "120", "run:app"]</code></pre>
+
+<h3 seq="auto">前端 Dockerfile</h3>
+
+<pre lang="dockerfile"><code># 构建阶段
+FROM node:18-alpine AS build
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+# 生产阶段：Nginx 托管静态文件
+FROM nginx:alpine
+COPY --from=build /app/dist /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]</code></pre>
+
+<p>Nginx 配置（<code>frontend/nginx.conf</code>），将 <code>/api</code> 请求反向代理到后端：</p>
+
+<pre lang="nginx"><code>server {
+    listen 80;
+    server_name localhost;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # 前端路由 fallback 到 index.html（SPA 支持）
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # API 反向代理到后端容器
+    location /api/ {
+        proxy_pass http://backend:5000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_read_timeout 120s;
+    }
+
+    # 静态资源缓存
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg)$ {
+        expires 30d;
+        add_header Cache-Control "public, immutable";
+    }
+}</code></pre>
+
+<h3 seq="auto">Docker Compose 编排要点</h3>
+
+<p><code>docker-compose.yml</code> 中的关键设计模式：</p>
+
+<ol>
+<li><p><strong>健康检查驱动的启动顺序</strong>：使用 <code>depends_on</code> + <code>condition: service_healthy</code> 确保依赖服务就绪后再启动下游服务，避免启动时连接失败。</p></li>
+<li><p><strong>一次性初始化容器</strong>：kg-init 和 ollama-init 使用 <code>restart: "no"</code>，只在首次启动时执行数据导入和模型拉取，幂等设计避免重复执行。</p></li>
+<li><p><strong>数据持久化</strong>：所有有状态服务（MySQL、Neo4j、Redis、Ollama）使用命名卷持久化数据，容器重建不丢失数据。</p></li>
+<li><p><strong>环境变量配置</strong>：通过 <code>.env</code> 文件覆盖默认配置，敏感信息（密码、密钥）不硬编码在 compose 文件中。</p></li>
+<li><p><strong>资源预留</strong>：Ollama 服务可通过取消注释 <code>deploy.resources</code> 启用 GPU 加速。</p></li>
+</ol>
+
+<h3 seq="auto">生产环境注意事项</h3>
+
+<callout emoji="⚠️" background-color="light-orange" border-color="orange"><p>以下事项在部署到生产环境前必须处理：</p></callout>
+
+<ul>
+<li><p><strong>设置强 SECRET_KEY</strong>：通过环境变量设置足够长的随机密钥，否则 JWT 签名可被伪造。</p></li>
+<li><p><strong>启用 AUTH_REQUIRED</strong>：设置为 true，保护多 Agent 问诊等 API 端点。</p></li>
+<li><p><p><strong>限制 CORS_ORIGINS</strong>：不要使用 <code>*</code>，指定前端实际域名。</p></li>
+<li><p><strong>修改默认密码</strong>：MySQL root 密码和 Neo4j 密码必须修改。</p></li>
+<li><p><strong>配置 HTTPS</strong>：在 Nginx 前或 Nginx 中配置 SSL 证书。</p></li>
+<li><p><strong>多 worker 限制</strong>：当前后端使用 Gunicorn 单 worker，因为会话状态在进程内存中。如需多 worker，需先将会话存储迁移到 Redis（已支持）。</p></li>
+<li><p><strong>日志收集</strong>：后端已输出结构化 JSON 日志，建议接入 ELK 或 Loki 进行集中收集和分析。</p></li>
+<li><p><strong>模型性能</strong>：Qwen2.5-3B 在 CPU 上推理较慢，生产环境建议使用 GPU 或切换到云端 API。</p></li>
+</ul>
+
+<h1 seq="auto">验证与学习路径</h1>
+
+<h2 seq="auto">项目验证命令</h2>
+
+<p>完成开发后，按以下命令验证：</p>
+
+<pre lang="bash"><code># 后端语法检查
+cd backend
+python -m compileall app
+
+# 多 Agent 评测（50 例临床样本）
+python evaluation.py
+
+# 前端构建检查
+cd frontend
+npm run build</code></pre>
+
+<h2 seq="auto">推荐学习路径</h2>
+
+<table>
+<thead><tr><th background-color="light-gray"><p>阶段</p></th><th background-color="light-gray"><p>学习内容</p></th><th background-color="light-gray"><p>对应项目模块</p></th><th background-color="light-gray"><p>预计时间</p></th></tr></thead>
+<tbody>
+<tr><td><p>第 1 周</p></td><td><p>Python 基础、Flask 框架、REST API 设计</p></td><td><p>backend/app/__init__.py、routes/</p></td><td><p>5-7 天</p></td></tr>
+<tr><td><p>第 2 周</p></td><td><p>MySQL、SQLAlchemy ORM、Neo4j 图数据库、Cypher</p></td><td><p>models/、rag_service.py、data/</p></td><td><p>5-7 天</p></td></tr>
+<tr><td><p>第 3 周</p></td><td><p>Vue 3、Vite、Pinia、Vue Router、Axios、Tailwind CSS</p></td><td><p>frontend/src/</p></td><td><p>5-7 天</p></td></tr>
+<tr><td><p>第 4 周</p></td><td><p>大模型基础、Ollama、LangChain、RAG、向量检索</p></td><td><p>services/ai_service.py、services/rag/</p></td><td><p>7-10 天</p></td></tr>
+<tr><td><p>第 5 周</p></td><td><p>多 Agent 架构、Function Calling、CoT、置信度门控、MCP</p></td><td><p>services/agents/、services/tools/、mcp_server/</p></td><td><p>7-10 天</p></td></tr>
+<tr><td><p>第 6 周</p></td><td><p>Docker、Docker Compose、Nginx、Gunicorn、生产部署</p></td><td><p>Dockerfile、docker-compose.yml</p></td><td><p>3-5 天</p></td></tr>
+</tbody>
+</table>
+
+<callout emoji="🎯" background-color="light-purple" border-color="purple"><p>学习建议：不要试图一次掌握所有技术。先跑通项目，再按"后端 → 前端 → AI → 部署"的顺序逐个模块深入，每个模块修改代码并观察效果，是最快的学习方式。</p></callout>

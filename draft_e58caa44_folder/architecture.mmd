@@ -1,0 +1,39 @@
+graph TB
+    subgraph 前端层["前端层 (Vue 3 + Vite)"]
+        A[页面视图 Views]
+        B[Pinia 状态管理]
+        C[Vue Router 路由]
+        D[ECharts 可视化]
+        E[Axios HTTP 封装]
+    end
+    subgraph 后端层["后端层 (Flask REST API)"]
+        F[Blueprint 蓝图路由]
+        G[Service 业务服务层]
+        H[Middleware 中间件]
+        I[Tool Registry 工具注册表]
+    end
+    subgraph 数据层["数据层"]
+        J[(MySQL 8.0 结构化数据)]
+        K[(Neo4j 知识图谱)]
+        L[(Redis 会话缓存)]
+    end
+    subgraph AI层["AI 层 (大模型与智能体)"]
+        M[Ollama / Qwen2.5-3B]
+        N[LangChain 编排]
+        O[RAG 检索增强生成]
+        P[多 Agent 三级协同]
+        Q[MCP 模型上下文协议]
+    end
+    A --> E
+    E -->|HTTP/JSON| F
+    F --> G
+    G --> J
+    G --> K
+    G --> L
+    G --> I
+    I --> Q
+    Q --> P
+    P --> N
+    N --> M
+    N --> O
+    O --> K
