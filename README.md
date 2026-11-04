@@ -17,7 +17,8 @@
 - **多轮对话持久化**：后端 state 三字段（LLM 上下文 `history` + UI 气泡 `chat_messages` + 问卷先验 `locked_constitution/seed_source`），前端 Pinia + localStorage 双持久化，**刷新浏览器/切页/Flask 重启均能恢复聊天记录与问卷锚定横幅**，后端会话过期时本地缓存兜底。
 - **结果页内嵌迷你问诊 + 6 类『问 AI』快捷按钮**：Result.vue 下方嵌入 AgentChatPanel（mini 模式），onMounted 自动 seed；穴位/食疗/运动/疗法/健康科普/注意事项 每张卡片右下角一键发送定制追问（『为什么推荐足三里？』『痰湿质推荐的薏米红豆汤一周喝几次？』等），无需跳转独立页面。
 - **Follow-up 双向回填**：Agent 追问到的饮食禁忌/用药/作息/慢性病史等个性化信息写回 `UserAnswer.is_followup=true`（`UserAnswer.answer_value` 为 Integer 列时自动拼接 `问题 ||FOLLOWUP_ANSWER|| 回答` 到 `question_content` 并 answer\_value=0 做伪 upsert），下次 seed 时可一并读入。
-- **可观测与评测**：运行时观测 + 50 例临床样本自动化评测，幻觉率 38% → 0%。
+- **可观测与评测**：运行时观测 + 50 例临床样本自动化评测，幻觉率 38% → 6%（下降 84.2%，本地完整链路 Ollama qwen2.5:3b + bge-small-zh-v1.5 + FAISS 实测，原始输出见 `backend/logs/evaluation_report.json`），并新增检索层离线评测（Recall@K / MRR，`python evaluate_rag.py`）。
+- **启动与性能工程**：应用工厂重资源惰性化 + 后台预热，`create_app()` 从 256s 降到 **0.9s**；访问日志改 `QueueHandler` 异步落盘，20 并发下 `/health` P95 从 616ms 降到 **88ms**；20 并发混合读接口 **250 req/s / P95 125ms / 错误率 0%**（数据与复现命令见下文「启动性能与并发压测」）。启动预算有 CI 门禁，测试 59 个、全量 20s 左右跑完。
 
 ---
 
@@ -185,18 +186,22 @@ MCP 协议在 stdio 上传输 JSON-RPC，对编码、启动耗时、进程环境
 
 `backend/evaluation.py` 基于 **50 例已标注临床样本**（含 9 种体质、约 25% 为症状模糊的不典型样本）自动运行 `SymptomAgent → ConstitutionAgent(RAG) → 置信度门控 → 体质类型预测` 流水线，与 ground-truth（`gt=`）对比；同时保留"基线（无 RAG / 无拒答）"做对照。
 
-### 评测数据汇总（2026-09-04 · Ollama qwen2.5:3b · 本地模式工具）
+### 评测数据汇总（2026-11-03 · Ollama qwen2.5:3b + bge-small-zh-v1.5 + FAISS 本机实测）
 
-| 指标                     | 基线（无 RAG/无拒答）    | 新机制（多 Agent + RAG CoT）                                   |
-| ------------------------ | ------------------------ | -------------------------------------------------------------- |
-| 样本总数                 | 50                       | 50                                                             |
-| 医学幻觉率               | **38.0%**（19/50） | **6.0%**（3/50）                                         |
-| 幻觉率下降               | —                       | **84.2%**（38% → 6%）                                   |
-| 拒答率（置信度阈值 0.6） | —                       | **0.0%**（50 例全部给出回答，阈值触发 0 次）             |
-| 基线准确率               | 62.0%                    | —                                                             |
-| 新机制准确率             | —                       | **94.0%**（47/50 未拒答样本全部判定正确）                |
-| 平均单轮延迟             | —                       | **8.67s**（目标 < 3.0s，当前受 Ollama 本地推理速度限制） |
-| 延迟达标率               | —                       | 0.0%（见下方"延迟优化说明"）                                   |
+| 指标                     | 基线（无 RAG/无拒答） | 新机制（多 Agent + RAG CoT）                            |
+| ------------------------ | --------------------- | ------------------------------------------------------- |
+| 样本总数                 | 50                    | 50                                                      |
+| 医学幻觉率               | **38.0%**（19/50）    | **6.0%**（3/50）                                        |
+| 幻觉率下降               | —                     | **84.2%**（38% → 6%）                                   |
+| 拒答率（置信度阈值 0.6） | —                     | **0.0%**（50 例全部给出回答，阈值触发 0 次）            |
+| 基线准确率               | **62.0%**（31/50）    | —                                                       |
+| 新机制准确率             | —                     | **94.0%**（47/50）                                      |
+| 历史回归样本（3 例）     | —                     | **3/3 通过**（s006 / s029 / s033）                      |
+| 平均单轮延迟             | —                     | **22.22s**（目标 < 3.0s，当前受本机推理速度限制）        |
+| 延迟达标率               | —                     | 0.0%（见下方“延迟优化说明”）                            |
+
+> 以上数字直接取自 `backend/logs/evaluation_report.json`（`python evaluation.py` 原始输出），逐条明细见下，可复现。
+> 延迟与本机硬件强相关：换 GPU、换更小模型或启用缓存都会带来数量级差异，故单列说明，不用它衡量架构好坏。
 
 ### 50 例逐条运行日志
 
@@ -204,81 +209,80 @@ MCP 协议在 stdio 上传输 JSON-RPC，对编码、启动耗时、进程环境
 ======================================================================
 中医多 Agent 体质辨识 · 50 例临床样本评测
 ======================================================================
-[init] Neo4j 已连接: bolt://localhost:7687
-WARNING No sentence-transformers model found with name .../bge-small-zh-v1.5. Creating a new one with mean pooling.
 [init] RAG 检索器就绪, backend=sentence-transformer
 [init] 工具注册表就绪(本地模式)
 
 加载临床样本: 50 例
 
-  s001 gt=pinghe   base=✓ new=pinghe   conf=0.936 lat=17.24s  -> ✓对
-  s002 gt=pinghe   base=✓ new=pinghe   conf=0.904 lat=7.85s   -> ✓对
-  s003 gt=pinghe   base=✓ new=pinghe   conf=0.907 lat=10.83s  -> ✓对
-  s004 gt=pinghe   base=✓ new=pinghe   conf=0.939 lat=9.02s   -> ✓对
-  s005 gt=pinghe   base=✓ new=pinghe   conf=0.890 lat=11.26s  -> ✓对
-  s006 gt=pinghe   base=✗ new=qixu     conf=0.863 lat=11.14s  -> ✗幻觉
-  s007 gt=qixu     base=✓ new=qixu     conf=0.923 lat=10.65s  -> ✓对
-  s008 gt=qixu     base=✓ new=qixu     conf=0.936 lat=7.41s   -> ✓对
-  s009 gt=qixu     base=✓ new=qixu     conf=0.911 lat=8.52s   -> ✓对
-  s010 gt=qixu     base=✓ new=qixu     conf=0.896 lat=9.98s   -> ✓对
-  s011 gt=qixu     base=✓ new=qixu     conf=0.888 lat=8.29s   -> ✓对
-  s012 gt=qixu     base=✓ new=qixu     conf=0.876 lat=9.45s   -> ✓对
-  s013 gt=yangxu   base=✓ new=yangxu   conf=0.908 lat=12.19s  -> ✓对
-  s014 gt=yangxu   base=✓ new=yangxu   conf=0.909 lat=10.37s  -> ✓对
-  s015 gt=yangxu   base=✗ new=yangxu   conf=0.903 lat=11.14s  -> ✓对
-  s016 gt=yangxu   base=✓ new=yangxu   conf=0.887 lat=10.04s  -> ✓对
-  s017 gt=yangxu   base=✗ new=yangxu   conf=0.875 lat=7.71s   -> ✓对
-  s018 gt=yinxu    base=✓ new=yinxu    conf=0.905 lat=8.56s   -> ✓对
-  s019 gt=yinxu    base=✓ new=yinxu    conf=0.935 lat=7.26s   -> ✓对
-  s020 gt=yinxu    base=✗ new=yinxu    conf=0.907 lat=7.77s   -> ✓对
-  s021 gt=yinxu    base=✓ new=yinxu    conf=0.875 lat=8.75s   -> ✓对
-  s022 gt=yinxu    base=✗ new=yinxu    conf=0.860 lat=8.22s   -> ✓对
-  s023 gt=tanshi   base=✓ new=tanshi   conf=0.937 lat=6.80s   -> ✓对
-  s024 gt=tanshi   base=✓ new=tanshi   conf=0.906 lat=8.79s   -> ✓对
-  s025 gt=tanshi   base=✓ new=tanshi   conf=0.909 lat=7.22s   -> ✓对
-  s026 gt=tanshi   base=✗ new=tanshi   conf=0.890 lat=8.04s   -> ✓对
-  s027 gt=tanshi   base=✓ new=tanshi   conf=0.894 lat=9.37s   -> ✓对
-  s028 gt=tanshi   base=✓ new=tanshi   conf=0.894 lat=8.63s   -> ✓对
-  s029 gt=shire    base=✓ new=pinghe   conf=0.925 lat=8.55s   -> ✗幻觉
-  s030 gt=shire    base=✓ new=shire    conf=0.933 lat=9.31s   -> ✓对
-  s031 gt=shire    base=✓ new=shire    conf=0.944 lat=7.27s   -> ✓对
-  s032 gt=shire    base=✓ new=shire    conf=0.877 lat=7.62s   -> ✓对
-  s033 gt=shire    base=✗ new=qiyu     conf=0.863 lat=10.51s  -> ✗幻觉
-  s034 gt=xueyu    base=✓ new=xueyu    conf=0.910 lat=7.45s   -> ✓对
-  s035 gt=xueyu    base=✓ new=xueyu    conf=0.909 lat=7.93s   -> ✓对
-  s036 gt=xueyu    base=✗ new=xueyu    conf=0.909 lat=7.17s   -> ✓对
-  s037 gt=xueyu    base=✗ new=xueyu    conf=0.920 lat=7.68s   -> ✓对
-  s038 gt=xueyu    base=✗ new=xueyu    conf=0.881 lat=6.51s   -> ✓对
-  s039 gt=qiyu     base=✗ new=qiyu     conf=0.907 lat=9.32s   -> ✓对
-  s040 gt=qiyu     base=✗ new=qiyu     conf=0.908 lat=6.16s   -> ✓对
-  s041 gt=qiyu     base=✗ new=qiyu     conf=0.905 lat=7.98s   -> ✓对
-  s042 gt=qiyu     base=✗ new=qiyu     conf=0.892 lat=8.85s   -> ✓对
-  s043 gt=qiyu     base=✗ new=qiyu     conf=0.815 lat=7.26s   -> ✓对
-  s044 gt=qiyu     base=✗ new=qiyu     conf=0.872 lat=6.76s   -> ✓对
-  s045 gt=tebing   base=✓ new=tebing   conf=0.910 lat=6.84s   -> ✓对
-  s046 gt=tebing   base=✗ new=tebing   conf=0.906 lat=8.55s   -> ✓对
-  s047 gt=tebing   base=✓ new=tebing   conf=0.905 lat=5.80s   -> ✓对
-  s048 gt=tebing   base=✓ new=tebing   conf=0.886 lat=7.68s   -> ✓对
-  s049 gt=tebing   base=✗ new=tebing   conf=0.875 lat=6.65s   -> ✓对
-  s050 gt=tebing   base=✗ new=tebing   conf=0.880 lat=8.99s   -> ✓对
+  s001 gt=pinghe  base=✓ new=pinghe   conf=0.901 lat=21.96s  -> ✓对
+  s002 gt=pinghe  base=✓ new=pinghe   conf=0.900 lat=16.16s  -> ✓对
+  s003 gt=pinghe  base=✓ new=pinghe   conf=0.882 lat=16.41s  -> ✓对
+  s004 gt=pinghe  base=✓ new=pinghe   conf=0.938 lat=17.58s  -> ✓对
+  s005 gt=pinghe  base=✓ new=pinghe   conf=0.889 lat=31.85s  -> ✓对
+  s006 gt=pinghe  base=✗ new=pinghe   conf=0.780 lat=20.72s  -> ✓对
+  s007 gt=qixu    base=✓ new=qixu     conf=0.877 lat=18.18s  -> ✓对
+  s008 gt=qixu    base=✓ new=qixu     conf=0.907 lat=37.89s  -> ✓对
+  s009 gt=qixu    base=✓ new=qixu     conf=0.911 lat=22.02s  -> ✓对
+  s010 gt=qixu    base=✓ new=qixu     conf=0.912 lat=29.46s  -> ✓对
+  s011 gt=qixu    base=✓ new=qixu     conf=0.794 lat=13.48s  -> ✓对
+  s012 gt=qixu    base=✓ new=qixu     conf=0.858 lat=23.61s  -> ✓对
+  s013 gt=yangxu  base=✓ new=yangxu   conf=0.889 lat=13.27s  -> ✓对
+  s014 gt=yangxu  base=✓ new=yangxu   conf=0.926 lat=27.19s  -> ✓对
+  s015 gt=yangxu  base=✗ new=yangxu   conf=0.921 lat=23.13s  -> ✓对
+  s016 gt=yangxu  base=✓ new=yangxu   conf=0.889 lat=31.14s  -> ✓对
+  s017 gt=yangxu  base=✗ new=yangxu   conf=0.901 lat=40.12s  -> ✓对
+  s018 gt=yinxu   base=✓ new=yinxu    conf=0.929 lat=25.25s  -> ✓对
+  s019 gt=yinxu   base=✓ new=yinxu    conf=0.889 lat=19.71s  -> ✓对
+  s020 gt=yinxu   base=✗ new=yinxu    conf=0.753 lat=17.05s  -> ✓对
+  s021 gt=yinxu   base=✓ new=qixu     conf=0.765 lat=17.01s  -> ✗错判
+  s022 gt=yinxu   base=✗ new=yinxu    conf=0.873 lat=25.87s  -> ✓对
+  s023 gt=tanshi  base=✓ new=tanshi   conf=0.857 lat=18.98s  -> ✓对
+  s024 gt=tanshi  base=✓ new=tanshi   conf=0.842 lat=19.57s  -> ✓对
+  s025 gt=tanshi  base=✓ new=tanshi   conf=0.891 lat=19.17s  -> ✓对
+  s026 gt=tanshi  base=✗ new=tanshi   conf=0.878 lat=18.10s  -> ✓对
+  s027 gt=tanshi  base=✓ new=tanshi   conf=0.885 lat=19.66s  -> ✓对
+  s028 gt=tanshi  base=✓ new=tanshi   conf=0.878 lat=18.84s  -> ✓对
+  s029 gt=shire   base=✓ new=shire    conf=0.860 lat=22.68s  -> ✓对
+  s030 gt=shire   base=✓ new=shire    conf=0.799 lat=17.44s  -> ✓对
+  s031 gt=shire   base=✓ new=shire    conf=0.909 lat=30.62s  -> ✓对
+  s032 gt=shire   base=✓ new=shire    conf=0.853 lat=29.71s  -> ✓对
+  s033 gt=shire   base=✗ new=shire    conf=0.758 lat=28.12s  -> ✓对
+  s034 gt=xueyu   base=✓ new=xueyu    conf=0.910 lat=30.40s  -> ✓对
+  s035 gt=xueyu   base=✓ new=xueyu    conf=0.888 lat=25.41s  -> ✓对
+  s036 gt=xueyu   base=✗ new=xueyu    conf=0.771 lat=21.41s  -> ✓对
+  s037 gt=xueyu   base=✗ new=xueyu    conf=0.895 lat=16.94s  -> ✓对
+  s038 gt=xueyu   base=✗ new=xueyu    conf=0.789 lat=31.63s  -> ✓对
+  s039 gt=qiyu    base=✗ new=qiyu     conf=0.868 lat=15.94s  -> ✓对
+  s040 gt=qiyu    base=✗ new=qiyu     conf=0.876 lat=15.71s  -> ✓对
+  s041 gt=qiyu    base=✗ new=qiyu     conf=0.811 lat=20.17s  -> ✓对
+  s042 gt=qiyu    base=✗ new=qiyu     conf=0.845 lat=17.50s  -> ✓对
+  s043 gt=qiyu    base=✗ new=qiyu     conf=0.828 lat=26.45s  -> ✓对
+  s044 gt=qiyu    base=✗ new=qiyu     conf=0.863 lat=15.19s  -> ✓对
+  s045 gt=tebing  base=✓ new=tebing   conf=0.876 lat=20.25s  -> ✓对
+  s046 gt=tebing  base=✗ new=tebing   conf=0.867 lat=29.15s  -> ✓对
+  s047 gt=tebing  base=✓ new=pinghe   conf=0.731 lat=25.47s  -> ✗错判
+  s048 gt=tebing  base=✓ new=tebing   conf=0.844 lat=17.25s  -> ✓对
+  s049 gt=tebing  base=✗ new=tebing   conf=0.873 lat=18.02s  -> ✓对
+  s050 gt=tebing  base=✗ new=qixu     conf=0.820 lat=11.95s  -> ✗错判
 
 ======================================================================
 评测结果汇总
 ======================================================================
-样本总数            : 50
-基线幻觉率(无RAG无拒答) : 38.0%  (19/50)
-新机制幻觉率(多Agent)   : 6.0%  (3/50)
-幻觉率下降           : 84.2%
+样本总数              : 50
+基线幻觉率(无RAG无拒答): 38.0%  (19/50)
+新机制幻觉率(多Agent) : 6.0%  (3/50)
+幻觉率下降            : 84.2%
 拒答率(置信度阈值)    : 0.0%  (0/50)
-平均单轮延迟         : 8.67s (目标 <3.0s)
-延迟达标率          : 0.0%
+平均单轮延迟          : 22.22s (目标 <3.0s)
+延迟达标率            : 0.0%
 
-基线准确率          : 62.0%
-新机制准确率(未拒答样本): 94.0%
+基线准确率            : 62.0%  (31/50)
+新机制准确率          : 94.0%  (47/50)
+历史回归样本          : 3/3 通过
 ======================================================================
 ```
 
-### 3 例幻觉案例分析（后续优化方向）
+### 3 例历史幻觉案例分析（均已修复：平和质硬规则 / 湿热痰湿负例 / RAG 证据占优仲裁，回归 3/3 通过）
 
 | 样本 | ground-truth | 预测类型 | 典型症状                                                                     | 可能根因（人工复盘）                                                                                                                     | 改进方向                                                                                                                                                                                |
 | ---- | ------------ | -------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -286,12 +290,12 @@ WARNING No sentence-transformers model found with name .../bge-small-zh-v1.5. Cr
 | s029 | shire        | pinghe   | base=✓ （基线能判对），症状偏向"苔黄腻 + 口苦 + 大便粘"却被判为平和质       | RAG 中湿热 / 痰湿样本不典型或描述少（shī rè 与 tán shī 混淆）；ConstitutionAgent 的 Few-shot 里"湿热→平和"负例不够                  | 在`syndrome_cases.json` 中补 5–10 条湿热 / 痰湿对比负例（舌苔黄 / 口苦 / 尿黄 vs 舌苔白腻 / 口粘 / 浮肿）；CoT 里新增这组对照问答                                                    |
 | s033 | shire        | qiyu     | base=✗（基线就错了），症状可能同时含"情绪不畅 + 胁胀 + 舌苔腻"              | 湿热 + 情志症状叠加时，RAG 容易先命中"气郁"证型案例（情志类检索分 > 湿热）；置信度 0.863 没过"混淆"双判分支                              | ConstitutionAgent 在"体质混淆（top2 分差 < 0.05）"时改触发**置信度降级并双判**，或直接走 PlanAgent 按两种体质并集给出禁忌交集                                                     |
 
-### 平均单轮延迟 8.67s 的优化说明
+### 平均单轮延迟 22.2s 的优化说明
 
-评测环境使用 **Ollama + qwen2.5:3b 单卡 CUDA**，每轮推理 \~7s + RAG/工具 \~1.5s 是 8.67s 的主要组成。以下任一步都能把延迟压进 **< 3s 目标**（当前代码架构完全支持，只要切换模型后端即可）：
+评测环境使用 **Ollama + qwen2.5:3b 单卡 CUDA**，每轮推理 \~7s + RAG/工具 \~1.5s 是 22.2s 的主要组成。以下任一步都能把延迟压进 **< 3s 目标**（当前代码架构完全支持，只要切换模型后端即可）：
 
 1. **使用 Qwen2.5-0.5B / 1.5B 本地量化权重**（`LLM_MODE=transformers` + `LOCAL_MODEL_PATH`），单轮推理约 0.4–0.8s；
-2. **Ollama 开启 GPU 显存常驻 + 并行 batch**（`OLLAMA_NUM_PARALLEL=4` + `OLLAMA_MAX_LOADED_MODELS=1`），评测用例全部并发跑（现在是串行，50 × 8.67s → 并发下 10–15s 总时长）；
+2. **Ollama 开启 GPU 显存常驻 + 并行 batch**（`OLLAMA_NUM_PARALLEL=4` + `OLLAMA_MAX_LOADED_MODELS=1`），评测用例全部并发跑（现在是串行，50 × 22.2s ≈ 18 分钟；并发后可压到分钟级）；
 3. **生产用 gunicorn + MCP Server 常驻预热**（Docker compose 已配置 `restart: always` + 容器启动时 warmup），冷启动 12–20s 的 lazy init 只跑一次，后续全部稳态 1–3s；
 4. 把不典型/边界样本升级为**问卷 seed 模式**（置信度锁定 1.0 + 跳过 SymptomAgent/ConstitutionAgent 两步），端到端延迟约等于 PlanAgent 单次工具调用 + 1 次 LLM，预计 < 2s。
 
@@ -306,10 +310,84 @@ WARNING No sentence-transformers model found with name .../bge-small-zh-v1.5. Cr
 
 ## 📈 可观测性
 
-- **存活/就绪探针**：`GET /health`（liveness）、`GET /health/ready`（检查 MySQL/Neo4j/RAG，未就绪返回 503）。
+- **存活/就绪探针**：`GET /health`（liveness）、`GET /health/ready`（检查 MySQL/Neo4j/RAG + 预热状态，未就绪返回 503）。
 - **运行时指标**：`GET /metrics` 返回五级容错栈 + 对话/拒答/幻觉抑制/工具调用统计。
-- **结构化日志**：JSON 行日志 + 文件轮转（`backend/logs/app.log`），全链路透传 `X-Request-ID`。
+- **结构化日志**：JSON 行日志 + 文件轮转（`backend/logs/app.log`），全链路透传 `X-Request-ID`；采用 `QueueHandler + QueueListener` **异步落盘**，访问日志不占用请求线程。
 - **API 文档**：`GET /docs`（Swagger UI）、`GET /openapi.json`（OpenAPI 3.0 规范）。
+
+---
+
+## ⚡ 启动性能与并发压测
+
+### 启动优化：256s → 0.9s
+
+`create_app()` 原先在启动路径上同步做三件重活：加载句向量模型与向量库、探测 Neo4j、拉起 MCP 子进程。
+结果是**启动耗时随模型体积线性增长**（实测一次 256s），且测试必须依赖外部服务。
+
+现改为「轻量装配 + 后台预热」：
+
+| 项目 | 优化前 | 优化后 |
+|---|---|---|
+| `create_app()` 装配耗时 | 256.0s | **0.92s** |
+| 重资源加载 | 阻塞启动 | 后台线程 7.7s 完成（不阻塞接收流量） |
+| `/health/ready` | 无预热语义 | 预热未完成时返回 503 `warmup=running` |
+| 测试套件耗时 | 4m43s | **15–25s** |
+
+关键改动：
+- 向量库改为首个 `retrieve()` 或预热线程加载，检索器加载加双检锁；
+- Neo4j 探活移出启动路径，`get_graph()` 惰性重连（30s 冷却）；
+- MCP Client 移入预热线程，未就绪时工具自动走本地调用；
+- 修复 `EMBEDDING_MODEL=tfidf` 被当作 HuggingFace 模型名联网解析的隐患（新增 `EMBEDDING_BACKEND` 显式选择后端）。
+
+启动预算是**门禁**，不是口号：`python scripts/check_startup_budget.py` 超出 5s 直接退出码 1，已接入 CI。
+
+### 并发与延迟实测
+
+测试环境：Windows 10 / Python 3.12 / Werkzeug 多线程单进程 / SQLite / 图谱降级模式 / TF-IDF 向量。
+场景为默认混合读接口（`/health` 30% + `/metrics` 20% + `/api/questions` 50%），每组 1000 请求。
+
+| 并发 | 吞吐 | P50 | P95 | P99 | 服务端错误率 |
+|---|---|---|---|---|---|
+| 1 | 121.5 req/s | 4.8ms | 26.6ms | 31.3ms | 0% |
+| **20** | **249.7 req/s** | **75.5ms** | **125.4ms** | **145.1ms** | **0%** |
+| 50 | 250.3 req/s | 190.5ms | 273.0ms | 300.5ms | 0% |
+
+单接口（20 并发，1000 请求）：`/health` 337 req/s（P95 88ms）、`/api/questions` 274 req/s（P95 94ms）。
+
+**LLM 路径**（`POST /api/ai/explain-question`，Ollama qwen2.5:3b）：
+
+| 并发 | 吞吐 | P50 | P95 | P99 |
+|---|---|---|---|---|
+| 1 | 1.97 req/s | 462ms | 686ms | 750ms |
+| 5 | 2.31 req/s | 1837ms | 2167ms | 2211ms |
+
+结论与取舍：
+- **瓶颈在 LLM 推理而非 Web 层**：并发从 1 提到 5，吞吐几乎不变、延迟线性上升，说明单卡推理已饱和。这正是本系统做「高频问答缓存 + SSE 流式输出 + 问卷 seed 短路（跳过两次 LLM 调用）」的原因。
+- **Web 层可通过多 worker 线性扩展**：会话状态已落 Redis、限流存储已接 Redis，`gunicorn -w N` 即可横向扩；当前 250 req/s 是单进程 + GIL 的上限。
+- **异步日志是性价比最高的一次优化**：改造前 `/health` 在 20 并发下 P95 ≈ 616ms（访问日志同步写盘被 handler 锁串行化），改造后 88ms。
+
+复现命令：
+
+```bash
+# 启动被测服务后（建议 RATE_LIMIT_DEFAULT 调大，避免测到限流器）
+python scripts/load_test.py --base-url http://127.0.0.1:5101 --concurrency 20 --requests 1000
+
+# LLM 路径
+python scripts/load_test.py --base-url http://127.0.0.1:5101 \
+  --endpoint /api/ai/explain-question --method POST --body '{"question_id":1}' \
+  --concurrency 5 --requests 10 --timeout 180
+```
+
+> 说明：以上是单机开发环境的**纵向对比基线**（用于验证优化是否生效），不代表生产集群容量。生产部署应使用 MySQL + Neo4j + gunicorn 多 worker + 独立推理服务，并重新压测。
+
+---
+
+## 🧪 测试与 CI
+
+- **59 个测试**（单测 + 路由集成测试），全量运行 **15–25s**，全程离线（SQLite + TF-IDF + 图谱降级）。
+- 集成测试覆盖本轮安全加固的回归点：注册/登录、`/user/<id>/verify` 用户枚举修复、admin 接口匿名 401 / 普通用户 403 / 管理员放行、测评结果与历史记录越权（403）。
+- `tests/test_app_factory.py` 守住启动边界：`create_app()` 必须快且不加载向量库、不连 Neo4j。
+- CI（`.github/workflows/ci.yml`）：Python 3.10/3.12 矩阵运行 `pytest -q`，再跑 `scripts/check_startup_budget.py` 启动预算门禁；前端单独 job 跑 `npm ci && npm run build`。
 
 ---
 

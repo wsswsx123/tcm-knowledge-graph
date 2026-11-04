@@ -7,12 +7,22 @@ on:
 
 jobs:
   backend-tests:
-    name: 后端单测 (Python ${{ matrix.python-version }})
+    name: 后端测试 (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
         python-version: ['3.10', '3.12']
+    env:
+      # 测试全程离线：TF-IDF 替代句向量、不预热重资源、不连 Neo4j/Redis
+      EMBEDDING_BACKEND: tfidf
+      WARMUP_ENABLED: 'false'
+      MCP_ENABLED: 'false'
+      USE_OLLAMA: 'false'
+      NEO4J_URI: bolt://127.0.0.1:1
+      REDIS_URL: ''
+      SECRET_KEY: ci-test-secret
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -22,10 +32,12 @@ jobs:
         run: pip install -r backend/requirements-dev.txt
       - name: 语法检查
         run: python -m compileall backend/app
-      - name: 运行单测
+      - name: 运行单测 + 集成测试
         run: |
           cd backend
-          pytest -q
+          pytest -q --durations=10
+      - name: 启动耗时门禁（create_app 不加载重资源）
+        run: python scripts/check_startup_budget.py
 
   frontend-build:
     name: 前端构建 (Node 20)

@@ -1,10 +1,14 @@
-from flask import Blueprint, jsonify, current_app
+from flask import Blueprint, jsonify
+
+from ..services.neo4j_client import get_graph, degraded_response
 
 bp = Blueprint('recommend', __name__, url_prefix='/api/recommend')
 
 @bp.route('/<constitution>', methods=['GET'])
 def get_recommendations(constitution):
-    graph = current_app.neo4j_graph
+    graph = get_graph()
+    if graph is None:
+        return degraded_response()
     node_id = f"c_{constitution}"
     query = """
     MATCH (c:Constitution {id: $node_id})-[r]->(n)

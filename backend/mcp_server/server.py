@@ -31,6 +31,7 @@ Flask 后端通过 MCPClient 以子进程方式拉起本服务并调用工具。
 import json
 import os
 import sys
+from typing import Optional
 
 # 在任何 import / 打印之前强制 UTF-8。放在最顶部（紧跟 import sys 之后）。
 # Python 3.7+ 支持 reconfigure(encoding=...)。
@@ -104,20 +105,29 @@ mcp = FastMCP("tcm-kg-server")
 
 
 @mcp.tool()
-def get_constitution_recommendations(constitution: str) -> dict:
+def get_constitution_recommendations(constitution: Optional[str] = None) -> dict:
     """根据体质代码(如 qixu/yangxu/tanshi)从知识图谱查询推荐方案，包含穴位、食材、运动、疗法、注意事项。"""
+    constitution = (constitution or '').strip()
+    if not constitution:
+        return {'error': 'constitution 必填（如 qixu/yangxu/tanshi）'}
     return _get_kg_retriever().get_recommendations(constitution)
 
 
 @mcp.tool()
-def search_symptoms(query: str) -> list:
+def search_symptoms(query: Optional[str] = None) -> list:
     """在知识图谱中全文检索症状节点，辅助症状定位。"""
+    query = (query or '').strip()
+    if not query:
+        return []
     return _get_kg_retriever().search_symptoms(query, limit=5)
 
 
 @mcp.tool()
-def get_acupoint_prescription(constitution: str) -> dict:
+def get_acupoint_prescription(constitution: Optional[str] = None) -> dict:
     """根据体质代码生成穴位处方，返回穴位名称、定位、操作方法。"""
+    constitution = (constitution or '').strip()
+    if not constitution:
+        return {'error': 'constitution 必填（如 qixu/yangxu/tanshi）'}
     recs = _get_kg_retriever().get_recommendations(constitution)
     acupoints = recs.get('acupoints', [])
     return {
@@ -128,12 +138,21 @@ def get_acupoint_prescription(constitution: str) -> dict:
 
 
 @mcp.tool()
-def retrieve_similar_cases(symptoms: list, tongue: str = "", pulse: str = "") -> list:
-    """基于症状、舌象、脉象文本特征，通过向量召回检索相似证型案例。"""
-    if isinstance(symptoms, list):
-        symptoms_text = "；".join(symptoms)
-    else:
-        symptoms_text = str(symptoms)
+def retrieve_similar_cases(symptoms: Optional[list] = None,
+                           tongue: Optional[str] = None,
+                           pulse: Optional[str] = None) -> list:
+    """基于症状、舌象、脉象文本特征，通过向量召回检索相似证型案例。
+
+    参数容错：小模型 Function Calling 常把未采集的舌/脉传成 null，
+    FastMCP 按签名生成 pydantic 校验，非 Optional 的 str 不接受 None，
+    会把校验错误当普通文本返回（调用方误判为"调用成功"）。
+    这里显式声明 Optional 并在函数内归一化，保证 null 也能正常检索。
+    """
+    if not isinstance(symptoms, list):
+        symptoms = []
+    tongue = (tongue or "").strip()
+    pulse = (pulse or "").strip()
+    symptoms_text = "；".join(str(s) for s in symptoms if str(s).strip())
     return _get_case_retriever().retrieve(symptoms_text, tongue=tongue, pulse=pulse)
 
 
@@ -193,7 +212,7 @@ def _mcp_build_reason(primary, secondary, scores, names_map=None):
 
 
 @mcp.tool()
-def get_assessment_scores(assessment_id: int) -> dict:
+def get_assessment_scores(assessment_id: Optional[int] = None) -> dict:
     """
     根据王琦量表问卷测评 ID 查询得分详情与体质判定说明。
 
@@ -204,6 +223,8 @@ def get_assessment_scores(assessment_id: int) -> dict:
       { assessment_id, primary, primary_name, secondary, secondary_names, scores:{ctype:float}, reason:str }
       若测评不存在返回 { error: 'assessment not found' }。
     """
+    if assessment_id is None:
+        return {'error': 'assessment_id 必填'}
     # 用 raw pymysql 连接 DB（避免 import backend.app 造成循环依赖）
     import pymysql  # lazy import
     db_user = os.environ.get('DB_USER', 'root')
@@ -288,7 +309,8 @@ def get_assessment_scores(assessment_id: int) -> dict:
 
 
 @mcp.tool()
-def get_conditioning_plan(constitution: str = None, assessment_id: int = None) -> dict:
+def get_conditioning_plan(constitution: Optional[str] = None,
+                          assessment_id: Optional[int] = None) -> dict:
     """
     获取与问卷辨识报告页面【口径一致】的专属调理方案 6 大类
     （穴位 / 食疗 / 运动 / 疗法过程 / 养生知识 / 注意事项）。

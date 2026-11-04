@@ -16,5 +16,16 @@ export default defineConfig({
         changeOrigin: true
       }
     }
+  },
+  build: {
+    // 框架与图表库单独拆 chunk：版本不变时浏览器可长期缓存
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (/[\\/]node_modules[\\/](echarts|zrender)[\\/]/.test(id)) return 'echarts'
+          if (/[\\/]node_modules[\\/](vue|vue-router|pinia|@vue)[\\/]/.test(id)) return 'vue'
+        }
+      }
+    }
   }
 })

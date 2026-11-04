@@ -16,7 +16,8 @@ services:
       # MYSQL_AUTHENTICATION_PLUGIN: mysql_native_password
       TZ: Asia/Shanghai
     ports:
-      - "3306:3306"
+      # 仅绑定本机回环，避免数据库直接暴露公网
+      - "127.0.0.1:3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
       - ./data/init_mysql.sql:/docker-entrypoint-initdb.d/init_mysql.sql:ro
@@ -39,8 +40,9 @@ services:
       NEO4J_PLUGINS: '["apoc"]'
       TZ: Asia/Shanghai
     ports:
-      - "7474:7474"
-      - "7687:7687"
+      # 仅绑定本机回环
+      - "127.0.0.1:7474:7474"
+      - "127.0.0.1:7687:7687"
     volumes:
       - neo4j_data:/data
       - neo4j_logs:/logs
@@ -102,12 +104,15 @@ services:
 
   redis:
     image: redis:7-alpine
+    # 启用密码认证（REDIS_PASSWORD 未设置时使用默认 demo 密码，生产请务必在 .env 覆盖）
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:-tcm_redis_demo}"]
     ports:
-      - "6379:6379"
+      # 仅绑定本机回环
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD:-tcm_redis_demo} ping | grep PONG"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -124,6 +129,9 @@ services:
       NEO4J_URI: bolt://neo4j:7687
       NEO4J_USER: neo4j
       NEO4J_PASSWORD: ${NEO4J_PASSWORD:-password}
+      # 管理员引导账号（首次启动自动创建，角色 admin）
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       # LLM：走 Ollama（容器内互联）
       USE_OLLAMA: "true"
       OLLAMA_BASE_URL: http://ollama:11434
@@ -139,11 +147,11 @@ services:
       # MCP
       MCP_ENABLED: "true"
       MCP_CONNECT_TIMEOUT: "60"
-      # 安全
-      AUTH_REQUIRED: ${AUTH_REQUIRED:-false}
-      CORS_ORIGINS: "*"
-      # 会话
-      REDIS_URL: redis://redis:6379/0
+      # 安全：生产默认强制 JWT 鉴权；演示可用 .env 设 AUTH_REQUIRED=false
+      AUTH_REQUIRED: ${AUTH_REQUIRED:-true}
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+      # 会话与限流共用 Redis（带密码）
+      REDIS_URL: redis://:${REDIS_PASSWORD:-tcm_redis_demo}@redis:6379/0
       SESSION_TTL: "86400"
       TZ: Asia/Shanghai
     depends_on:

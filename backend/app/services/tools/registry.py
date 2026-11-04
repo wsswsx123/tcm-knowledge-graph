@@ -16,11 +16,15 @@ import logging
 import os
 import time
 import threading
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from typing import Any, Callable, Dict, List, Optional
 
 from ...config import Config
 
 logger = logging.getLogger(__name__)
+
+# 日志写锁（F8）：并发下避免写坏 JSONL
+_log_lock = threading.Lock()
 
 _TOOL_LOG_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))),
@@ -35,8 +39,9 @@ def _ensure_log_dir():
 def _append_tool_log(record: dict):
     try:
         _ensure_log_dir()
-        with open(_TOOL_LOG_PATH, 'a', encoding='utf-8') as f:
-            f.write(json.dumps(record, ensure_ascii=False) + '\n')
+        with _log_lock:
+            with open(_TOOL_LOG_PATH, 'a', encoding='utf-8') as f:
+                f.write(json.dumps(record, ensure_ascii=False) + '\n')
     except Exception as e:
         logger.warning(f"工具日志写入失败: {e}")
 
@@ -68,6 +73,12 @@ class ToolRegistry:
     def rag_retriever(self):
         return self._rag_retriever
 
+    def get_mode(self) -> str:
+        """F13：公共接口返回当前工具调用模式（mcp/local），外部不再读私有 _mcp_client。"""
+        if self._mcp_client is not None and getattr(self._mcp_client, 'connected', False):
+            return 'mcp'
+        return 'local'
+
     def register(self, name: str, description: str, parameters: dict,
                  func: Callable, category: str = 'general'):
         """注册一个工具。parameters 为 JSON Schema 风格的参数描述。"""
@@ -88,6 +99,40 @@ class ToolRegistry:
             for t in self._tools.values()
         ]
 
+    def search_tools(self, query: str, top_k: int = 5) -> List[dict]:
+        """工具检索（P2-2）：按任务语义从工具库中召回 top-k 个候选工具。
+
+        当前为轻量 n-gram 打分（中文场景，工具规模 30+ 时的领域初筛）；
+        规模更大时可替换为工具描述向量库 + 语义检索，接口保持不变。
+
+        打分规则：工具 name/description 的中文 n-gram（2~4 字）在 query
+        中出现的次数加权（name 命中权重更高）。
+        """
+        if not query:
+            return []
+
+        def _ngrams(text: str):
+            words = set()
+            for n in (2, 3, 4):
+                for i in range(max(0, len(text) - n + 1)):
+                    w = text[i:i + n]
+                    if w.strip():
+                        words.add(w)
+            return words
+
+        query_clean = query.replace(' ', '').replace('\n', '')
+        scored = []
+        for spec in self._tools.values():
+            name_words = _ngrams(spec['name'])
+            desc_words = _ngrams(spec['description'])
+            name_hits = sum(1 for w in name_words if w in query_clean)
+            desc_hits = sum(1 for w in desc_words if w in query_clean)
+            score = name_hits * 3.0 + desc_hits
+            if score > 0:
+                scored.append((score, spec))
+        scored.sort(key=lambda x: x[0], reverse=True)
+        return [spec for _, spec in scored[:top_k]]
+
     def call(self, name: str, **kwargs) -> Any:
         """
         调用工具，自动重试 + 日志追踪 + 超时。
@@ -98,6 +143,8 @@ class ToolRegistry:
 
         max_retries = getattr(Config, 'TOOL_MAX_RETRIES', 3)
         timeout = getattr(Config, 'TOOL_TIMEOUT', 15.0)
+        # 单轮工具总预算（F3）：跨多次重试累计耗时封顶，避免最坏 3*60=180s
+        total_budget = getattr(Config, 'TOOL_TOTAL_BUDGET', 25.0)
         started = time.time()
         attempts = 0
         last_error = None
@@ -115,6 +162,10 @@ class ToolRegistry:
 
         for attempt in range(1, max_retries + 1):
             attempts = attempt
+            # 总预算检查：已超预算立即放弃，不再重试
+            if time.time() - started > total_budget:
+                logger.warning(f"工具 {name} 已超单轮总预算 {total_budget}s，放弃重试")
+                break
             try:
                 start = time.time()
                 if use_mcp and not mcp_fell_back:
@@ -128,6 +179,18 @@ class ToolRegistry:
                 ok = True
                 logger.info(f"工具 {name} 调用成功(第{attempt}次,{mode_used}) 耗时{elapsed}s")
                 break
+            except TimeoutError:
+                # 超时类错误（F3）：不重试同一后端——重跑只会再等一个超时。
+                # MCP 模式超时则回退本地 callable 试一次（五级容错第 4 级）；
+                # 本地超时直接失败降级。
+                last_error = f"工具调用超时({timeout}s)"
+                if use_mcp and not mcp_fell_back:
+                    mcp_fell_back = True
+                    mode_used = 'local'
+                    logger.warning(f"工具 {name} MCP 超时({timeout}s)，回退本地调用")
+                    continue
+                logger.warning(f"工具 {name} 超时({timeout}s)，按策略不重试，立即降级")
+                break
             except Exception as e:
                 last_error = str(e)
                 logger.warning(f"工具 {name} 第{attempt}次调用失败({mode_used}): {e}")
@@ -137,7 +200,7 @@ class ToolRegistry:
                     logger.info(f"工具 {name} MCP 失败，回退本地调用")
                     continue
                 if attempt < max_retries:
-                    time.sleep(0.5 * attempt)  # 指数退避
+                    time.sleep(0.5 * attempt)  # 指数退避（仅网络/业务错误）
 
         total_elapsed = round(time.time() - started, 4)
         try:
@@ -168,22 +231,20 @@ class ToolRegistry:
         return result
 
     def _call_with_timeout(self, fn: Callable, timeout: float) -> Any:
-        """简单超时包装（线程执行 + join）。"""
-        box = {}
-        def runner():
-            try:
-                box['result'] = fn()
-            except Exception as e:
-                box['error'] = e
-        t = threading.Thread(target=runner)
-        t.daemon = True
-        t.start()
-        t.join(timeout)
-        if t.is_alive():
+        """超时包装（F3）：ThreadPoolExecutor + future.result(timeout)。
+
+        注意：Python 线程无法被强杀（GIL），超时后 future.cancel() 只能取消排队任务；
+        正在跑的线程会作为 daemon 线程继续直到完成，不再阻塞主流程。
+        """
+        executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix='tool')
+        future = executor.submit(fn)
+        try:
+            return future.result(timeout=timeout)
+        except FutureTimeoutError:
+            future.cancel()
             raise TimeoutError(f"工具调用超时({timeout}s)")
-        if 'error' in box:
-            raise box['error']
-        return box.get('result')
+        finally:
+            executor.shutdown(wait=False)
 
     def get_langchain_tools(self) -> list:
         """导出为 LangChain StructuredTool 列表，供 Agent.bind_tools。"""

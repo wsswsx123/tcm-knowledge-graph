@@ -11,6 +11,7 @@ Agent 基类。
 import json
 import logging
 import re
+import threading
 import time
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
@@ -19,31 +20,47 @@ from ..token_usage import extract_usage, record_llm_usage
 
 logger = logging.getLogger(__name__)
 
-_llm_instance = None
-_llm_available = None
+_llm_instances = {}   # num_predict -> LLM 实例（按输出长度分桶缓存）
+_llm_failed = False   # 全局 LLM 不可用标记（任意一次初始化失败即短路）
 _llm_backend = 'unknown'
+_llm_init_lock = threading.Lock()   # F8：多请求并发初始化时加锁，防重复加载
 
 
-def get_llm():
-    """单例获取 ChatOllama。失败可按配置尝试本地 Qwen，再返回 None（走规则）。"""
-    global _llm_instance, _llm_available, _llm_backend
-    if _llm_available is False:
+def get_llm(num_predict: Optional[int] = None):
+    """单例获取 ChatOllama。失败可按配置尝试本地 Qwen，再返回 None（走规则）。
+
+    num_predict：按值缓存不同实例；方案生成 Agent 用更大上限避免 JSON 截断。
+    """
+    global _llm_failed, _llm_backend
+    if _llm_failed:
         return None
-    if _llm_instance is not None:
-        return _llm_instance
+    if num_predict is None:
+        num_predict = int(getattr(Config, 'LLM_MAX_TOKENS', 512))
+    if num_predict in _llm_instances:
+        return _llm_instances[num_predict]
+    # 双检锁：已存在直接返回；不存在才进入锁内初始化
+    with _llm_init_lock:
+        if num_predict in _llm_instances:
+            return _llm_instances[num_predict]
+        return _build_llm(num_predict)
+
+
+def _build_llm(num_predict: int):
+    """实际构造 LLM 实例（需在 _llm_init_lock 内调用）。失败置 _llm_failed。"""
+    global _llm_failed, _llm_backend
     try:
         from langchain_ollama import ChatOllama
-        _llm_instance = ChatOllama(
+        inst = ChatOllama(
             model=getattr(Config, 'OLLAMA_MODEL', 'qwen2.5:3b'),
             base_url=getattr(Config, 'OLLAMA_BASE_URL', 'http://localhost:11434'),
             temperature=0.3,
-            num_predict=512,
+            num_predict=num_predict,
         )
-        _llm_available = True
+        _llm_instances[num_predict] = inst
         _llm_backend = 'ollama'
-        logger.info("ChatOllama LLM 已就绪")
+        logger.info("ChatOllama LLM 已就绪(num_predict=%d)", num_predict)
         _sync_llm_obs()
-        return _llm_instance
+        return inst
     except Exception as e:
         logger.warning(f"ChatOllama 初始化失败({e})")
 
@@ -55,19 +72,19 @@ def get_llm():
             pipe = hf_pipeline(
                 'text-generation',
                 model=Cfg.MODEL_PATH_QWEN,
-                max_new_tokens=512,
+                max_new_tokens=num_predict,
                 temperature=0.3,
             )
-            _llm_instance = HuggingFacePipeline(pipeline=pipe)
-            _llm_available = True
+            inst = HuggingFacePipeline(pipeline=pipe)
+            _llm_instances[num_predict] = inst
             _llm_backend = 'huggingface'
             logger.info("本地 Transformers Qwen 已作为 LLM 降级后端")
             _sync_llm_obs()
-            return _llm_instance
+            return inst
         except Exception as e:
             logger.warning(f"本地 Qwen 加载失败({e})")
 
-    _llm_available = False
+    _llm_failed = True
     _llm_backend = 'rules'
     _sync_llm_obs()
     return None
@@ -112,10 +129,12 @@ class BaseAgent:
     def __init__(self, name: str, role: str = ''):
         self.name = name
         self.role = role or name
+        # 单次 LLM 输出 token 上限：子类可覆盖（方案生成 Agent 需要更大空间装下结构化 JSON）
+        self.max_tokens = int(getattr(Config, 'LLM_MAX_TOKENS', 512))
 
     def _invoke_llm(self, prompt: str, trace: List[Dict[str, Any]]) -> str:
         """调用 LLM 返回文本。失败时设置 trace 的 degraded 标志。"""
-        llm = get_llm()
+        llm = get_llm(num_predict=self.max_tokens)
         if llm is None:
             trace.append({'agent': self.name, 'degraded': True,
                           'reason': 'LLM 不可用，走降级模式', 'backend': 'rules'})
@@ -145,33 +164,46 @@ class BaseAgent:
 
     def _invoke_with_tools(self, prompt: str, trace: List[Dict[str, Any]],
                            allowed_tools: Optional[Sequence[str]] = None
-                           ) -> Tuple[str, List[str]]:
+                           ) -> Tuple[str, List[str], Dict[str, Any]]:
         """
         LangChain Function Calling 循环：bind_tools -> 执行 ToolRegistry.call -> 再推理。
-        返回 (最终文本, 实际调用过的工具名列表)。
+        返回 (最终文本, 实际调用过的工具名列表, {工具名: 工具返回值})。
         小模型或不支持 tool_calls 时自动退回普通 invoke。
         """
         from ..tools.registry import get_registry
 
-        llm = get_llm()
+        llm = get_llm(num_predict=self.max_tokens)
         if llm is None:
             trace.append({'agent': self.name, 'degraded': True,
                           'reason': 'LLM 不可用，走降级模式', 'backend': 'rules'})
-            return '', []
+            return '', [], {}
 
         registry = get_registry()
         all_tools = registry.get_langchain_tools()
         if allowed_tools:
             allow = set(allowed_tools)
             tools = [t for t in all_tools if getattr(t, 'name', '') in allow]
+        elif (getattr(Config, 'TOOL_RETRIEVER_ENABLED', True)
+              and len(all_tools) >= int(getattr(Config, 'TOOL_RETRIEVER_TRIGGER', 10))):
+            # 工具规模大（>= trigger）时启用 Tool Retriever（P2-2）：
+            # 按当前任务 prompt 语义召回 top-k 工具注入 bind_tools
+            specs = registry.search_tools(
+                prompt[:300], top_k=int(getattr(Config, 'TOOL_RETRIEVER_TOOLS', 5)))
+            selected = {s['name'] for s in specs}
+            tools = [t for t in all_tools if getattr(t, 'name', '') in selected]
+            trace.append({
+                'agent': self.name, 'event': 'tool_retriever',
+                'total_tools': len(all_tools), 'selected': sorted(selected),
+            })
         else:
             tools = all_tools
 
         if not tools or not hasattr(llm, 'bind_tools'):
-            return self._invoke_llm(prompt, trace), []
+            return self._invoke_llm(prompt, trace), [], {}
 
         max_rounds = getattr(Config, 'TOOL_CALLING_MAX_ROUNDS', 3)
         used: List[str] = []
+        tool_results: Dict[str, Any] = {}   # F5：缓存工具返回值，避免上游重复调用
         round_usages: List[Dict[str, Any]] = []
         started = time.time()
         try:
@@ -209,6 +241,7 @@ class BaseAgent:
                         result = registry.call(tname, **targs)
                         payload = json.dumps(result, ensure_ascii=False, default=str)
                         ok = True
+                        tool_results[tname] = result
                     except Exception as e:
                         payload = json.dumps({'error': str(e)}, ensure_ascii=False)
                         ok = False
@@ -230,13 +263,13 @@ class BaseAgent:
                 'tools_called': used,
                 'token_usage': total_usage,
             })
-            return final_text, used
+            return final_text, used, tool_results
         except Exception as e:
             logger.warning(f"{self.name} Function Calling 失败，回退普通推理: {e}")
             trace.append({
                 'agent': self.name, 'note': f'Function Calling 回退: {e}',
             })
-            return self._invoke_llm(prompt, trace), used
+            return self._invoke_llm(prompt, trace), used, tool_results
 
     def _parse_json(self, text: str) -> Optional[Dict[str, Any]]:
         return parse_json_from_text(text)

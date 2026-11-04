@@ -10,11 +10,15 @@
 
 运行：
   cd backend
-  python evaluation.py
+  python evaluation.py                     # 全量评测
+  python evaluation.py --regression         # 回归模式：历史失败样本必须通过，否则退出码=1
+  python evaluation.py --samples s006,s029  # 只看指定样本
 
 说明：本评测为基于模拟临床样本的自动化评测。样本由 data/rag/clinical_samples.json 提供，
 其中约25%为症状模糊的不典型样本，用于检验拒答机制。
+标记 regression=true 的样本为历史幻觉 case，必须在回归模式下全部判定正确。
 """
+import argparse
 import json
 import logging
 import os
@@ -112,7 +116,7 @@ def init_stack():
     return get_master_agent()
 
 
-def evaluate():
+def evaluate(samples_filter=None, regression_only=False):
     print("=" * 70)
     print("中医多 Agent 体质辨识 · 50 例临床样本评测")
     print("=" * 70)
@@ -126,6 +130,10 @@ def evaluate():
 
     master = init_stack()
     samples = load_samples()
+    if samples_filter:
+        samples = [s for s in samples if s.get('sample_id') in samples_filter]
+    if regression_only:
+        samples = [s for s in samples if s.get('regression')]
     print(f"\n加载临床样本: {len(samples)} 例\n")
 
     results = []
@@ -193,6 +201,7 @@ def evaluate():
             'rejected': is_rejected,
             'confidence': con.get('confidence'),
             'latency': latency,
+            'regression': bool(s.get('regression', False)),
         })
 
         tag = '拒答' if is_rejected else ('✓对' if new_ok else '✗幻觉')
@@ -229,6 +238,17 @@ def evaluate():
         'details': results,
     }
 
+    # ===== 回归集统计：历史幻觉 case 必须全部通过 =====
+    reg_results = [r for r in results if r.get('regression')]
+    reg_failed = [r for r in reg_results if r.get('rejected') or not r.get('new_ok')]
+    report['regression'] = {
+        'enabled': regression_only,
+        'total': len(reg_results),
+        'passed': len(reg_results) - len(reg_failed),
+        'failed': [{'sample_id': r['sample_id'], 'ground_truth': r['ground_truth'],
+                    'new_pred': r['new_pred'], 'rejected': r['rejected']} for r in reg_failed],
+    }
+
     # 读拒答日志做交叉验证
     try:
         reject_events = read_reject_log()
@@ -253,10 +273,33 @@ def evaluate():
     print(f"延迟达标率          : {latency_ok_rate:.1%}")
     print(f"\n基线准确率          : {baseline_correct/n:.1%}")
     print(f"新机制准确率(未拒答样本): {new_correct/max(n-rejected,1):.1%}")
+
+    # 回归集结果打印
+    if reg_results:
+        print(f"\n回归集(历史幻觉case) : {len(reg_results)} 例，通过 {len(reg_results)-len(reg_failed)} 例")
+        for r in reg_failed:
+            print(f"  ✗ {r['sample_id']} gt={r['ground_truth']} "
+                  f"pred={r['new_pred']} rejected={r['rejected']}")
+
     print(f"\n报告已写入: {report_path}")
     print("=" * 70)
+    if regression_only and reg_failed:
+        print("回归模式未通过：历史幻觉 case 仍存在失败样本（退出码=1）")
     return report
 
 
 if __name__ == '__main__':
-    evaluate()
+    parser = argparse.ArgumentParser(description='中医多 Agent 体质辨识 · 临床样本评测')
+    parser.add_argument('--regression', action='store_true',
+                        help='回归模式：只跑 regression 标记样本，失败则退出码=1')
+    parser.add_argument('--samples', type=str, default=None,
+                        help='只看指定样本（逗号分隔 sample_id）')
+    args = parser.parse_args()
+
+    samples_filter = None
+    if args.samples:
+        samples_filter = {x.strip() for x in args.samples.split(',') if x.strip()}
+
+    report = evaluate(samples_filter=samples_filter, regression_only=args.regression)
+    if args.regression and report.get('regression', {}).get('failed'):
+        sys.exit(1)

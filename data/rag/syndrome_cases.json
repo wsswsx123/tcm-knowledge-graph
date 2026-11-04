@@ -3,7 +3,13 @@
     "case_id": "case_001",
     "constitution": "pinghe",
     "constitution_name": "平和质",
-    "symptoms": ["面色红润", "精力充沛", "睡眠良好", "胃纳佳", "二便调"],
+    "symptoms": [
+      "面色红润",
+      "精力充沛",
+      "睡眠良好",
+      "胃纳佳",
+      "二便调"
+    ],
     "tongue": "舌淡红，苔薄白",
     "pulse": "脉象和缓有力",
     "syndrome": "阴阳调和证",
@@ -14,7 +20,13 @@
     "case_id": "case_002",
     "constitution": "pinghe",
     "constitution_name": "平和质",
-    "symptoms": ["体态适中", "目光有神", "面色润泽", "不易疲劳", "性格开朗"],
+    "symptoms": [
+      "体态适中",
+      "目光有神",
+      "面色润泽",
+      "不易疲劳",
+      "性格开朗"
+    ],
     "tongue": "舌淡红，苔薄白润",
     "pulse": "脉象从容和缓",
     "syndrome": "气血充盛证",
@@ -25,7 +37,13 @@
     "case_id": "case_003",
     "constitution": "pinghe",
     "constitution_name": "平和质",
-    "symptoms": ["肌肤润泽", "头发亮泽", "嗅觉通利", "精力旺盛", "耐受寒暑"],
+    "symptoms": [
+      "肌肤润泽",
+      "头发亮泽",
+      "嗅觉通利",
+      "精力旺盛",
+      "耐受寒暑"
+    ],
     "tongue": "舌色淡红，舌体适中，苔薄白",
     "pulse": "脉不浮不沉，和缓有力",
     "syndrome": "脏腑安和证",
@@ -36,7 +54,14 @@
     "case_id": "case_004",
     "constitution": "pinghe",
     "constitution_name": "平和质",
-    "symptoms": ["面色红润", "唇色红润", "目光清明", "睡眠安稳", "食欲良好", "二便通畅"],
+    "symptoms": [
+      "面色红润",
+      "唇色红润",
+      "目光清明",
+      "睡眠安稳",
+      "食欲良好",
+      "二便通畅"
+    ],
     "tongue": "舌质淡红，苔薄白",
     "pulse": "脉象和匀有力",
     "syndrome": "营卫调和证",
@@ -47,7 +72,13 @@
     "case_id": "case_005",
     "constitution": "qixu",
     "constitution_name": "气虚质",
-    "symptoms": ["容易疲乏", "气短懒言", "自汗", "易感冒", "面色萎黄"],
+    "symptoms": [
+      "容易疲乏",
+      "气短懒言",
+      "自汗",
+      "易感冒",
+      "面色萎黄"
+    ],
     "tongue": "舌淡红，舌体胖大有齿痕，苔薄白",
     "pulse": "脉虚细无力",
     "syndrome": "脾气亏虚证",
@@ -58,7 +89,14 @@
     "case_id": "case_006",
     "constitution": "qixu",
     "constitution_name": "气虚质",
-    "symptoms": ["声音低弱", "气短", "容易疲乏", "自汗", "易患鼻炎", "食欲不振"],
+    "symptoms": [
+      "声音低弱",
+      "气短",
+      "容易疲乏",
+      "自汗",
+      "易患鼻炎",
+      "食欲不振"
+    ],
     "tongue": "舌淡，舌体胖大，边有齿痕，苔薄白",
     "pulse": "脉弱无力",
     "syndrome": "肺气亏虚证",
@@ -69,7 +107,14 @@
     "case_id": "case_007",
     "constitution": "qixu",
     "constitution_name": "气虚质",
-    "symptoms": ["心悸气短", "动则加重", "神疲乏力", "自汗", "面色淡白", "食少便溏"],
+    "symptoms": [
+      "心悸气短",
+      "动则加重",
+      "神疲乏力",
+      "自汗",
+      "面色淡白",
+      "食少便溏"
+    ],
     "tongue": "舌淡胖有齿痕，苔薄白",
     "pulse": "脉虚细或结代",
     "syndrome": "心肺气虚证",
@@ -80,7 +125,14 @@
     "case_id": "case_008",
     "constitution": "yangxu",
     "constitution_name": "阳虚质",
-    "symptoms": ["手足不温", "畏寒怕冷", "喜温饮食", "大便溏薄", "小便清长", "面色柔白"],
+    "symptoms": [
+      "手足不温",
+      "畏寒怕冷",
+      "喜温饮食",
+      "大便溏薄",
+      "小便清长",
+      "面色柔白"
+    ],
     "tongue": "舌淡胖嫩，苔润",
     "pulse": "脉沉迟无力",
     "syndrome": "脾肾阳虚证",
@@ -91,7 +143,14 @@
     "case_id": "case_009",
     "constitution": "yangxu",
     "constitution_name": "阳虚质",
-    "symptoms": ["腰膝冷痛", "畏寒肢冷", "夜尿频多", "性欲减退", "面色晦暗", "精神不振"],
+    "symptoms": [
+      "腰膝冷痛",
+      "畏寒肢冷",
+      "夜尿频多",
+      "性欲减退",
+      "面色晦暗",
+      "精神不振"
+    ],
     "tongue": "舌淡胖，苔白滑",
     "pulse": "脉沉细无力，两尺尤甚",
     "syndrome": "肾阳不足证",
@@ -102,7 +161,14 @@
     "case_id": "case_010",
     "constitution": "yangxu",
     "constitution_name": "阳虚质",
-    "symptoms": ["心胸闷痛", "畏寒肢冷", "面色苍白", "心悸", "自汗", "神倦欲寐"],
+    "symptoms": [
+      "心胸闷痛",
+      "畏寒肢冷",
+      "面色苍白",
+      "心悸",
+      "自汗",
+      "神倦欲寐"
+    ],
     "tongue": "舌淡胖有齿痕，苔白滑",
     "pulse": "脉沉微或沉迟",
     "syndrome": "心阳不振证",
@@ -113,7 +179,14 @@
     "case_id": "case_011",
     "constitution": "yinxu",
     "constitution_name": "阴虚质",
-    "symptoms": ["手足心热", "口燥咽干", "鼻微干", "喜冷饮", "大便干燥", "面色潮红"],
+    "symptoms": [
+      "手足心热",
+      "口燥咽干",
+      "鼻微干",
+      "喜冷饮",
+      "大便干燥",
+      "面色潮红"
+    ],
     "tongue": "舌红少津，少苔",
     "pulse": "脉细数",
     "syndrome": "肝肾阴虚证",
@@ -124,7 +197,14 @@
     "case_id": "case_012",
     "constitution": "yinxu",
     "constitution_name": "阴虚质",
-    "symptoms": ["干咳少痰", "口干咽燥", "声音嘶哑", "形体消瘦", "五心烦热", "盗汗"],
+    "symptoms": [
+      "干咳少痰",
+      "口干咽燥",
+      "声音嘶哑",
+      "形体消瘦",
+      "五心烦热",
+      "盗汗"
+    ],
     "tongue": "舌红少津，苔少或无苔",
     "pulse": "脉细数",
     "syndrome": "肺肾阴虚证",
@@ -135,7 +215,14 @@
     "case_id": "case_013",
     "constitution": "yinxu",
     "constitution_name": "阴虚质",
-    "symptoms": ["心烦失眠", "手足心热", "口干津少", "头晕耳鸣", "腰膝酸软", "多梦健忘"],
+    "symptoms": [
+      "心烦失眠",
+      "手足心热",
+      "口干津少",
+      "头晕耳鸣",
+      "腰膝酸软",
+      "多梦健忘"
+    ],
     "tongue": "舌红少苔",
     "pulse": "脉细数",
     "syndrome": "心肾不交证",
@@ -146,7 +233,14 @@
     "case_id": "case_014",
     "constitution": "tanshi",
     "constitution_name": "痰湿质",
-    "symptoms": ["体形肥胖", "腹部肥满", "胸闷痰多", "面部油脂多", "口黏腻或甜", "身重不爽"],
+    "symptoms": [
+      "体形肥胖",
+      "腹部肥满",
+      "胸闷痰多",
+      "面部油脂多",
+      "口黏腻或甜",
+      "身重不爽"
+    ],
     "tongue": "舌体胖大，舌苔白腻",
     "pulse": "脉滑",
     "syndrome": "痰湿困脾证",
@@ -157,7 +251,14 @@
     "case_id": "case_015",
     "constitution": "tanshi",
     "constitution_name": "痰湿质",
-    "symptoms": ["身体困重", "嗜食肥甘", "痰多色白", "大便黏滞", "面色黄暗", "喜食甜食"],
+    "symptoms": [
+      "身体困重",
+      "嗜食肥甘",
+      "痰多色白",
+      "大便黏滞",
+      "面色黄暗",
+      "喜食甜食"
+    ],
     "tongue": "舌胖大，苔白厚腻",
     "pulse": "脉滑或濡",
     "syndrome": "痰湿内阻证",
@@ -168,7 +269,14 @@
     "case_id": "case_016",
     "constitution": "tanshi",
     "constitution_name": "痰湿质",
-    "symptoms": ["咳嗽痰多", "色白易咯", "胸膈痞闷", "形体肥胖", "纳呆恶心", "身重困倦"],
+    "symptoms": [
+      "咳嗽痰多",
+      "色白易咯",
+      "胸膈痞闷",
+      "形体肥胖",
+      "纳呆恶心",
+      "身重困倦"
+    ],
     "tongue": "舌淡胖，苔白腻",
     "pulse": "脉滑",
     "syndrome": "痰湿蕴肺证",
@@ -179,7 +287,14 @@
     "case_id": "case_017",
     "constitution": "shire",
     "constitution_name": "湿热质",
-    "symptoms": ["面垢油光", "易生痤疮", "口苦口干", "身重困倦", "大便黏滞", "小便短赤"],
+    "symptoms": [
+      "面垢油光",
+      "易生痤疮",
+      "口苦口干",
+      "身重困倦",
+      "大便黏滞",
+      "小便短赤"
+    ],
     "tongue": "舌质偏红，苔黄腻",
     "pulse": "脉滑数",
     "syndrome": "湿热内蕴证",
@@ -190,7 +305,14 @@
     "case_id": "case_018",
     "constitution": "shire",
     "constitution_name": "湿热质",
-    "symptoms": ["胁肋胀痛", "口苦泛恶", "纳呆腹胀", "身目发黄", "小便黄赤", "身热不扬"],
+    "symptoms": [
+      "胁肋胀痛",
+      "口苦泛恶",
+      "纳呆腹胀",
+      "身目发黄",
+      "小便黄赤",
+      "身热不扬"
+    ],
     "tongue": "舌红苔黄腻",
     "pulse": "脉弦滑数",
     "syndrome": "肝胆湿热证",
@@ -201,7 +323,14 @@
     "case_id": "case_019",
     "constitution": "shire",
     "constitution_name": "湿热质",
-    "symptoms": ["带下量多色黄", "阴部瘙痒", "小便短赤", "口苦口干", "大便黏滞不爽", "下腹坠胀"],
+    "symptoms": [
+      "带下量多色黄",
+      "阴部瘙痒",
+      "小便短赤",
+      "口苦口干",
+      "大便黏滞不爽",
+      "下腹坠胀"
+    ],
     "tongue": "舌红苔黄腻",
     "pulse": "脉滑数",
     "syndrome": "湿热下注证",
@@ -212,7 +341,14 @@
     "case_id": "case_020",
     "constitution": "xueyu",
     "constitution_name": "血瘀质",
-    "symptoms": ["面色晦暗", "皮肤色素沉着", "易有瘀斑", "口唇暗淡", "眼眶暗黑", "肌肤甲错"],
+    "symptoms": [
+      "面色晦暗",
+      "皮肤色素沉着",
+      "易有瘀斑",
+      "口唇暗淡",
+      "眼眶暗黑",
+      "肌肤甲错"
+    ],
     "tongue": "舌质暗有瘀点，舌下脉络青紫",
     "pulse": "脉涩",
     "syndrome": "气滞血瘀证",
@@ -223,7 +359,14 @@
     "case_id": "case_021",
     "constitution": "xueyu",
     "constitution_name": "血瘀质",
-    "symptoms": ["肢体疼痛固定不移", "入夜痛甚", "面色黧黑", "唇甲青紫", "皮下瘀斑", "肌肤甲错"],
+    "symptoms": [
+      "肢体疼痛固定不移",
+      "入夜痛甚",
+      "面色黧黑",
+      "唇甲青紫",
+      "皮下瘀斑",
+      "肌肤甲错"
+    ],
     "tongue": "舌质紫暗有瘀斑",
     "pulse": "脉细涩",
     "syndrome": "瘀阻脉络证",
@@ -234,7 +377,14 @@
     "case_id": "case_022",
     "constitution": "xueyu",
     "constitution_name": "血瘀质",
-    "symptoms": ["手足冷痛", "得温痛减", "面色青紫", "唇色紫暗", "月经色暗有块", "小腹冷痛"],
+    "symptoms": [
+      "手足冷痛",
+      "得温痛减",
+      "面色青紫",
+      "唇色紫暗",
+      "月经色暗有块",
+      "小腹冷痛"
+    ],
     "tongue": "舌质紫暗，苔白润",
     "pulse": "脉沉紧或涩",
     "syndrome": "寒凝血瘀证",
@@ -245,7 +395,14 @@
     "case_id": "case_023",
     "constitution": "xueyu",
     "constitution_name": "血瘀质",
-    "symptoms": ["胸胁闷痛", "体形肥胖", "痰多色白", "面色晦暗", "皮下瘀斑", "肢体麻木"],
+    "symptoms": [
+      "胸胁闷痛",
+      "体形肥胖",
+      "痰多色白",
+      "面色晦暗",
+      "皮下瘀斑",
+      "肢体麻木"
+    ],
     "tongue": "舌暗胖有瘀点，苔白腻",
     "pulse": "脉弦滑或涩",
     "syndrome": "痰瘀互结证",
@@ -256,7 +413,14 @@
     "case_id": "case_024",
     "constitution": "qiyu",
     "constitution_name": "气郁质",
-    "symptoms": ["情绪低沉", "忧虑脆弱", "胸胁胀满", "善太息", "咽有异物感", "睡眠较差"],
+    "symptoms": [
+      "情绪低沉",
+      "忧虑脆弱",
+      "胸胁胀满",
+      "善太息",
+      "咽有异物感",
+      "睡眠较差"
+    ],
     "tongue": "舌淡红，苔薄白",
     "pulse": "脉弦",
     "syndrome": "肝郁气滞证",
@@ -267,7 +431,14 @@
     "case_id": "case_025",
     "constitution": "qiyu",
     "constitution_name": "气郁质",
-    "symptoms": ["情志抑郁", "腹胀便溏", "食少纳呆", "胸胁胀痛", "神疲乏力", "善太息"],
+    "symptoms": [
+      "情志抑郁",
+      "腹胀便溏",
+      "食少纳呆",
+      "胸胁胀痛",
+      "神疲乏力",
+      "善太息"
+    ],
     "tongue": "舌淡红，苔薄白或微腻",
     "pulse": "脉弦细",
     "syndrome": "肝郁脾虚证",
@@ -278,7 +449,14 @@
     "case_id": "case_026",
     "constitution": "qiyu",
     "constitution_name": "气郁质",
-    "symptoms": ["急躁易怒", "胸胁胀痛", "口苦口干", "头痛目赤", "心烦失眠", "便秘"],
+    "symptoms": [
+      "急躁易怒",
+      "胸胁胀痛",
+      "口苦口干",
+      "头痛目赤",
+      "心烦失眠",
+      "便秘"
+    ],
     "tongue": "舌红苔黄",
     "pulse": "脉弦数",
     "syndrome": "气郁化火证",
@@ -289,7 +467,14 @@
     "case_id": "case_027",
     "constitution": "tebing",
     "constitution_name": "特禀质",
-    "symptoms": ["过敏性鼻炎", "喷嚏频作", "鼻塞流涕", "易起荨麻疹", "皮肤瘙痒", "对花粉过敏"],
+    "symptoms": [
+      "过敏性鼻炎",
+      "喷嚏频作",
+      "鼻塞流涕",
+      "易起荨麻疹",
+      "皮肤瘙痒",
+      "对花粉过敏"
+    ],
     "tongue": "舌淡，苔薄白",
     "pulse": "脉细弱",
     "syndrome": "禀赋异常证",
@@ -300,7 +485,14 @@
     "case_id": "case_028",
     "constitution": "tebing",
     "constitution_name": "特禀质",
-    "symptoms": ["反复感冒", "自汗", "鼻痒喷嚏", "皮肤干燥瘙痒", "面色淡白", "易于过敏"],
+    "symptoms": [
+      "反复感冒",
+      "自汗",
+      "鼻痒喷嚏",
+      "皮肤干燥瘙痒",
+      "面色淡白",
+      "易于过敏"
+    ],
     "tongue": "舌淡红，苔薄白",
     "pulse": "脉弱",
     "syndrome": "卫表不固证",
@@ -311,7 +503,14 @@
     "case_id": "case_029",
     "constitution": "tebing",
     "constitution_name": "特禀质",
-    "symptoms": ["皮肤风团", "瘙痒剧烈", "遇风加重", "鼻塞流清涕", "眼痒流泪", "畏风"],
+    "symptoms": [
+      "皮肤风团",
+      "瘙痒剧烈",
+      "遇风加重",
+      "鼻塞流清涕",
+      "眼痒流泪",
+      "畏风"
+    ],
     "tongue": "舌淡红，苔薄白",
     "pulse": "脉浮或细",
     "syndrome": "风邪犯表证",
@@ -322,11 +521,539 @@
     "case_id": "case_030",
     "constitution": "tebing",
     "constitution_name": "特禀质",
-    "symptoms": ["自幼易喘", "皮肤湿疹", "面色苍白", "形体消瘦", "发育迟缓", "易对食物过敏"],
+    "symptoms": [
+      "自幼易喘",
+      "皮肤湿疹",
+      "面色苍白",
+      "形体消瘦",
+      "发育迟缓",
+      "易对食物过敏"
+    ],
     "tongue": "舌淡苔白",
     "pulse": "脉细弱",
     "syndrome": "先天禀赋不足证",
     "analysis": "先天精血不充，禀赋不足，肾气未充，肺脾亏虚，故自幼易喘、发育迟缓。",
     "recommendation_summary": "培补先天，益肾健脾，取肾俞、脾俞、足三里，食疗用山药、枸杞、核桃仁。"
+  },
+  {
+    "case_id": "case_031",
+    "constitution": "shire",
+    "constitution_name": "湿热质",
+    "symptoms": [
+      "面垢油光",
+      "易生痤疮",
+      "口苦口干",
+      "身重困倦",
+      "大便黏滞",
+      "小便短赤"
+    ],
+    "tongue": "舌质偏红，苔黄腻",
+    "pulse": "脉滑数",
+    "syndrome": "湿热内蕴证",
+    "analysis": "湿热熏蒸于面则面垢油光、易生痤疮；湿热上蒸则口苦口干；湿热困脾则身重困倦；湿热下注则小便短赤、大便黏滞。舌红苔黄腻、脉滑数为湿热典型舌脉。",
+    "recommendation_summary": "清热利湿为主，宜食薏苡仁、赤小豆、绿豆，忌辛辣油腻，可配足三里、阴陵泉按揉。"
+  },
+  {
+    "case_id": "case_032",
+    "constitution": "shire",
+    "constitution_name": "湿热质",
+    "symptoms": [
+      "心烦",
+      "口干",
+      "面油",
+      "睡眠欠佳"
+    ],
+    "tongue": "舌红，苔薄黄",
+    "pulse": "脉细数偏滑",
+    "syndrome": "湿热内蕴证（兼气郁倾向）",
+    "analysis": "湿热内蕴、郁而化热扰心则心烦失眠；热伤津液则口干；湿热上泛则面油。舌红苔薄黄、脉细数偏滑支持湿热，虽有情志不舒倾向但以湿热为主要矛盾，不可按单纯气郁处理。",
+    "recommendation_summary": "清心利湿，宜食冬瓜、莲子心、赤小豆，睡前按揉神门、内关，忌夜宵辛辣。"
+  },
+  {
+    "case_id": "case_033",
+    "constitution": "shire",
+    "constitution_name": "湿热质",
+    "symptoms": [
+      "头身困重",
+      "大便黏滞不爽",
+      "小便黄",
+      "汗出黏腻",
+      "口中黏腻"
+    ],
+    "tongue": "舌红，苔黄腻",
+    "pulse": "脉濡数",
+    "syndrome": "湿热内蕴证（湿重于热）",
+    "analysis": "长夏湿邪困阻，湿重于热：头身困重、口中黏腻、大便黏滞为湿盛；小便黄、苔黄腻、脉濡数为兼热。与痰湿质鉴别要点在苔色（黄腻vs白腻）与小溲（黄vs清）。",
+    "recommendation_summary": "利湿清热并重，宜食薏苡仁、茯苓、冬瓜，适当运动发汗祛湿，忌生冷黏腻。"
+  },
+  {
+    "case_id": "case_034",
+    "constitution": "shire",
+    "constitution_name": "湿热质",
+    "symptoms": [
+      "口苦",
+      "口干",
+      "急躁易怒",
+      "目赤",
+      "小便短黄"
+    ],
+    "tongue": "舌边红，苔黄",
+    "pulse": "脉弦数",
+    "syndrome": "肝胆湿热证",
+    "analysis": "湿热蕴结肝胆，疏泄失常：口苦、目赤、急躁易怒为肝胆热盛；小便短黄、苔黄脉弦数为湿热下注。此型易与气郁质混淆，鉴别在于有无黄腻苔与小便黄。",
+    "recommendation_summary": "清利肝胆湿热，宜食菊花、决明子、蒲公英，忌酒与辛辣，可按揉太冲、阳陵泉。"
+  },
+  {
+    "case_id": "case_035",
+    "constitution": "tanshi",
+    "constitution_name": "痰湿质",
+    "symptoms": [
+      "体形肥胖",
+      "口中黏腻",
+      "胸闷痰多",
+      "头重如裹",
+      "大便不成形"
+    ],
+    "tongue": "舌淡胖，苔白腻",
+    "pulse": "脉滑",
+    "syndrome": "痰湿内蕴证",
+    "analysis": "痰湿困脾：体形肥胖、口中黏腻、痰多、头重如裹；舌淡胖苔白腻、脉滑为痰湿典型。与湿热质的关键鉴别：苔白腻非黄腻、无口苦小便黄。",
+    "recommendation_summary": "健脾化痰祛湿，宜食陈皮、茯苓、薏苡仁、白扁豆，忌肥甘厚味，宜多运动。"
+  },
+  {
+    "case_id": "case_036",
+    "constitution": "tanshi",
+    "constitution_name": "痰湿质",
+    "symptoms": [
+      "脘腹痞闷",
+      "恶心欲呕",
+      "身重困倦",
+      "喜食肥甘"
+    ],
+    "tongue": "舌淡，苔白腻",
+    "pulse": "脉濡缓",
+    "syndrome": "痰湿内蕴证（湿重于痰）",
+    "analysis": "脾虚湿盛、中焦气机不利：脘腹痞闷、恶心欲呕；湿困肢体则身重困倦。苔白腻脉濡缓为寒湿/痰湿之象，无热象故不属湿热。",
+    "recommendation_summary": "燥湿化痰、理气和中，宜食陈皮、生姜、白术，忌生冷甜腻，饭后散步助运。"
+  },
+  {
+    "case_id": "case_037",
+    "constitution": "tanshi",
+    "constitution_name": "痰湿质",
+    "symptoms": [
+      "胸闷",
+      "咳嗽痰多清稀",
+      "晨起痰多",
+      "体倦"
+    ],
+    "tongue": "舌淡胖，苔白滑",
+    "pulse": "脉滑",
+    "syndrome": "痰湿内蕴证（痰浊阻肺）",
+    "analysis": "痰浊壅肺则胸闷、咳嗽痰多；痰色清稀、苔白滑提示湿痰而非热痰（热痰黄稠），与湿热质鉴别明确。",
+    "recommendation_summary": "温化寒痰、健脾益肺，宜食陈皮、生姜、紫苏，注意保暖避风寒。"
+  },
+  {
+    "case_id": "case_038",
+    "constitution": "qiyu",
+    "constitution_name": "气郁质",
+    "symptoms": [
+      "情志抑郁",
+      "善太息",
+      "胸胁胀满",
+      "咽部异物感"
+    ],
+    "tongue": "舌淡红，苔薄白",
+    "pulse": "脉弦",
+    "syndrome": "肝郁气滞证",
+    "analysis": "肝失疏泄、气机郁滞：情志抑郁、善太息、胸胁胀满；痰气交阻于咽喉则异物感。舌淡红苔薄白、脉弦支持气郁，无湿热之黄腻苔。",
+    "recommendation_summary": "疏肝解郁、行气散结，宜食玫瑰花、陈皮、薄荷，可练八段锦，按揉太冲、膻中。"
+  },
+  {
+    "case_id": "case_039",
+    "constitution": "qiyu",
+    "constitution_name": "气郁质",
+    "symptoms": [
+      "心烦易怒",
+      "失眠多梦",
+      "口干",
+      "胸闷叹气"
+    ],
+    "tongue": "舌淡红，苔薄白",
+    "pulse": "脉弦细",
+    "syndrome": "肝郁气滞证（气郁化火倾向）",
+    "analysis": "情志不遂、肝郁化火扰心：心烦易怒、失眠多梦、胸闷叹气；口干为郁火伤津。与湿热质鉴别：舌苔薄白而非黄腻、无面垢油光、无小便短黄，主因在气机郁滞而非湿热内蕴。",
+    "recommendation_summary": "疏肝解郁、清心安神，宜食莲子、百合、玫瑰花，忌思虑过度，睡前按揉神门。"
+  },
+  {
+    "case_id": "case_040",
+    "constitution": "qiyu",
+    "constitution_name": "气郁质",
+    "symptoms": [
+      "情绪波动后胃脘胀痛",
+      "嗳气",
+      "叹气则舒"
+    ],
+    "tongue": "舌淡红，苔薄白",
+    "pulse": "脉弦",
+    "syndrome": "肝郁气滞证（肝胃不和）",
+    "analysis": "肝气横逆犯胃：情绪波动后胃脘胀痛、嗳气、叹气则舒，气郁随情志变化而进退，是气郁质的典型特征。",
+    "recommendation_summary": "疏肝和胃、理气止痛，宜食陈皮、佛手、小米，忌恼怒，可练太极调息。"
+  },
+  {
+    "case_id": "case_041",
+    "constitution": "qixu",
+    "constitution_name": "气虚质",
+    "symptoms": [
+      "活动后气短",
+      "语声低微",
+      "食欲不振",
+      "食后腹胀",
+      "大便偏稀"
+    ],
+    "tongue": "舌淡，边有齿痕，苔薄白",
+    "pulse": "脉弱",
+    "syndrome": "脾气亏虚证",
+    "analysis": "脾主四肢肌肉，脾气不足则活动后气短、语声低微；脾失健运则食后腹胀、便溏。",
+    "recommendation_summary": "健脾益气，宜食山药、大枣、黄芪粥；可按足三里、气海；练习八段锦，避免过劳。"
+  },
+  {
+    "case_id": "case_042",
+    "constitution": "qixu",
+    "constitution_name": "气虚质",
+    "symptoms": [
+      "易出汗",
+      "稍动则汗出",
+      "怕风",
+      "反复感冒",
+      "疲乏无力"
+    ],
+    "tongue": "舌淡红，苔薄白",
+    "pulse": "脉虚缓",
+    "syndrome": "肺气虚证",
+    "analysis": "肺主气属卫，肺气虚则卫表不固，故自汗怕风、易反复感冒。",
+    "recommendation_summary": "益气固表，玉屏风散意；宜食黄芪、糯米；按肺俞、风门；注意避风。"
+  },
+  {
+    "case_id": "case_043",
+    "constitution": "qixu",
+    "constitution_name": "气虚质",
+    "symptoms": [
+      "精神不振",
+      "懒言",
+      "头晕",
+      "劳累后加重",
+      "食少"
+    ],
+    "tongue": "舌淡，苔薄白",
+    "pulse": "脉虚细",
+    "syndrome": "心脾气虚证",
+    "analysis": "心血不足、脾气虚弱，故神疲懒言、劳累后加重。",
+    "recommendation_summary": "补益心脾，宜食桂圆、山药；按百会、足三里；起居规律，避免熬夜。"
+  },
+  {
+    "case_id": "case_044",
+    "constitution": "qixu",
+    "constitution_name": "气虚质",
+    "symptoms": [
+      "气短喘促",
+      "动则尤甚",
+      "自汗",
+      "声音低怯",
+      "面色晄白"
+    ],
+    "tongue": "舌淡，苔白",
+    "pulse": "脉弱无力",
+    "syndrome": "肾不纳气证",
+    "analysis": "肺肾气虚，气不归元，故动则喘促、自汗声低。",
+    "recommendation_summary": "补益肺肾，宜食核桃、山药；按肾俞、关元；练吐纳导引，避免剧烈运动。"
+  },
+  {
+    "case_id": "case_045",
+    "constitution": "qixu",
+    "constitution_name": "气虚质",
+    "symptoms": [
+      "便后乏力",
+      "肛门下坠",
+      "久泻",
+      "气短",
+      "纳差"
+    ],
+    "tongue": "舌淡，边齿痕，苔薄白",
+    "pulse": "脉弱",
+    "syndrome": "中气下陷证",
+    "analysis": "脾虚升举无力，故肛门下坠、久泻；气虚则便后乏力。",
+    "recommendation_summary": "补中益气，宜食黄芪粥、南瓜；按百会、足三里；避免久站久立。"
+  },
+  {
+    "case_id": "case_046",
+    "constitution": "yangxu",
+    "constitution_name": "阳虚质",
+    "symptoms": [
+      "畏寒怕冷",
+      "手足不温",
+      "腰膝酸冷",
+      "夜尿多",
+      "小便清长"
+    ],
+    "tongue": "舌淡胖，苔白滑",
+    "pulse": "脉沉迟",
+    "syndrome": "肾阳不足证",
+    "analysis": "肾阳为一身阳气之本，阳虚则温煦失职，故畏寒肢冷、腰膝酸冷、夜尿清长。",
+    "recommendation_summary": "温补肾阳，宜食羊肉、韭菜、肉桂；按关元、命门；秋冬注意腰腹保暖。"
+  },
+  {
+    "case_id": "case_047",
+    "constitution": "yangxu",
+    "constitution_name": "阳虚质",
+    "symptoms": [
+      "胃脘冷痛",
+      "喜温喜按",
+      "食凉加重",
+      "大便稀溏",
+      "完谷不化"
+    ],
+    "tongue": "舌淡胖，边齿痕，苔白滑",
+    "pulse": "脉沉细",
+    "syndrome": "脾胃虚寒证",
+    "analysis": "脾阳不足，寒凝气滞，故胃脘冷痛、得温则减；运化失司故便溏。",
+    "recommendation_summary": "温中健脾，宜食生姜、桂圆、干姜粥；按中脘、足三里；忌食生冷。"
+  },
+  {
+    "case_id": "case_048",
+    "constitution": "yangxu",
+    "constitution_name": "阳虚质",
+    "symptoms": [
+      "手脚冰凉",
+      "遇冷腹泻",
+      "精神困倦",
+      "喜热饮",
+      "面色苍白"
+    ],
+    "tongue": "舌淡，苔白润",
+    "pulse": "脉沉弱",
+    "syndrome": "脾肾阳虚证",
+    "analysis": "脾肾阳虚，阴寒内盛，故四肢不温、遇冷则泻。",
+    "recommendation_summary": "温补脾肾，宜食羊肉、核桃；按足三里、关元；坚持日光浴。"
+  },
+  {
+    "case_id": "case_049",
+    "constitution": "yangxu",
+    "constitution_name": "阳虚质",
+    "symptoms": [
+      "畏寒",
+      "背部怕冷",
+      "小便频",
+      "夜尿2-3次",
+      "性欲减退"
+    ],
+    "tongue": "舌淡胖，苔白",
+    "pulse": "脉沉迟无力",
+    "syndrome": "肾阳亏虚证",
+    "analysis": "腰为肾之府，肾阳不足则背寒、夜尿频多。",
+    "recommendation_summary": "温补肾阳，宜食韭菜子、羊肉；按肾俞、命门；睡前温水泡脚。"
+  },
+  {
+    "case_id": "case_050",
+    "constitution": "yangxu",
+    "constitution_name": "阳虚质",
+    "symptoms": [
+      "受凉后腹痛",
+      "喜温喜按",
+      "便溏",
+      "四肢不温",
+      "口淡不渴"
+    ],
+    "tongue": "舌淡，苔白滑",
+    "pulse": "脉沉缓",
+    "syndrome": "中焦虚寒证",
+    "analysis": "中阳不足，寒自内生，故受凉腹痛、喜温按。",
+    "recommendation_summary": "温中散寒，宜食生姜红糖茶、大枣；按神阙、中脘；腹部保暖。"
+  },
+  {
+    "case_id": "case_051",
+    "constitution": "yinxu",
+    "constitution_name": "阴虚质",
+    "symptoms": [
+      "口干咽燥",
+      "夜间加重",
+      "手足心热",
+      "盗汗",
+      "大便干结"
+    ],
+    "tongue": "舌红少津，少苔",
+    "pulse": "脉细数",
+    "syndrome": "肺胃阴虚证",
+    "analysis": "阴液不足，不能制阳，虚热内生，故五心烦热、盗汗、口干便结。",
+    "recommendation_summary": "滋阴清热，宜食银耳、百合、梨；按太溪、三阴交；少熬夜，忌辛辣。"
+  },
+  {
+    "case_id": "case_052",
+    "constitution": "yinxu",
+    "constitution_name": "阴虚质",
+    "symptoms": [
+      "潮热盗汗",
+      "两颧潮红",
+      "口干",
+      "失眠多梦",
+      "腰膝酸软"
+    ],
+    "tongue": "舌红，少苔",
+    "pulse": "脉细数",
+    "syndrome": "肝肾阴虚证",
+    "analysis": "肝肾阴虚，虚热内扰，故潮热颧红、腰膝酸软、失眠。",
+    "recommendation_summary": "滋补肝肾，宜食枸杞、桑葚、黑芝麻；按太溪、涌泉；节制熬夜。"
+  },
+  {
+    "case_id": "case_053",
+    "constitution": "yinxu",
+    "constitution_name": "阴虚质",
+    "symptoms": [
+      "口干舌燥",
+      "饥不欲食",
+      "胃脘隐痛",
+      "大便干",
+      "干呕"
+    ],
+    "tongue": "舌红少苔，少津",
+    "pulse": "脉细数",
+    "syndrome": "胃阴不足证",
+    "analysis": "胃阴亏虚，濡润失职，故口干、饥不欲食、便干。",
+    "recommendation_summary": "滋养胃阴，宜食百合、银耳、石斛茶；按三阴交、内庭；忌煎炸。"
+  },
+  {
+    "case_id": "case_054",
+    "constitution": "yinxu",
+    "constitution_name": "阴虚质",
+    "symptoms": [
+      "心烦失眠",
+      "心悸",
+      "手足心热",
+      "口干",
+      "健忘"
+    ],
+    "tongue": "舌红，少苔",
+    "pulse": "脉细数",
+    "syndrome": "心阴虚证",
+    "analysis": "心阴不足，心神失养，故心烦失眠、心悸健忘。",
+    "recommendation_summary": "滋阴养心，宜食莲子、百合、酸枣仁；按神门、内关；睡前静心。"
+  },
+  {
+    "case_id": "case_055",
+    "constitution": "yinxu",
+    "constitution_name": "阴虚质",
+    "symptoms": [
+      "咽干",
+      "声音嘶哑",
+      "干咳少痰",
+      "皮肤干燥",
+      "盗汗"
+    ],
+    "tongue": "舌红，少苔",
+    "pulse": "脉细数",
+    "syndrome": "肺阴虚证",
+    "analysis": "肺阴不足，清肃失职，故咽干干咳、皮肤干燥。",
+    "recommendation_summary": "养阴润肺，宜食银耳、雪梨、百合；按鱼际、太溪；保持室内湿度。"
+  },
+  {
+    "case_id": "case_056",
+    "constitution": "xueyu",
+    "constitution_name": "血瘀质",
+    "symptoms": [
+      "面色晦暗",
+      "容易出现瘀斑",
+      "口唇色暗",
+      "女性痛经色暗有块",
+      "舌质紫暗"
+    ],
+    "tongue": "舌质紫暗，有瘀点",
+    "pulse": "脉涩",
+    "syndrome": "瘀血内停证",
+    "analysis": "血行不畅，瘀阻脉络，故面色晦暗、瘀斑、痛经夹块。",
+    "recommendation_summary": "活血化瘀，宜食山楂、红花茶；按血海、三阴交；坚持运动促血行。"
+  },
+  {
+    "case_id": "case_057",
+    "constitution": "xueyu",
+    "constitution_name": "血瘀质",
+    "symptoms": [
+      "局部刺痛",
+      "固定不移",
+      "夜间加重",
+      "面色黧黑",
+      "肌肤甲错"
+    ],
+    "tongue": "舌紫暗，有瘀斑",
+    "pulse": "脉涩",
+    "syndrome": "瘀血阻络证",
+    "analysis": "瘀血阻滞不通则痛，故刺痛固定、夜间加重。",
+    "recommendation_summary": "活血通络，宜食黑木耳、醋；按膈俞、合谷；注意保暖，忌久坐。"
+  },
+  {
+    "case_id": "case_058",
+    "constitution": "tebing",
+    "constitution_name": "特禀质",
+    "symptoms": [
+      "花粉季喷嚏",
+      "流清涕",
+      "鼻塞",
+      "皮肤起风团",
+      "眼痒"
+    ],
+    "tongue": "舌淡红，苔薄白",
+    "pulse": "脉浮缓",
+    "syndrome": "肺卫不固证",
+    "analysis": "禀赋异常，肺卫不固，故遇花粉等过敏原即发喷嚏、风团。",
+    "recommendation_summary": "益气固表、避免过敏原；宜食黄芪、乌梅；按风池、迎香；换季戴口罩。"
+  },
+  {
+    "case_id": "case_059",
+    "constitution": "tebing",
+    "constitution_name": "特禀质",
+    "symptoms": [
+      "荨麻疹反复发作",
+      "食海鲜加重",
+      "皮肤瘙痒",
+      "鼻炎",
+      "哮喘史"
+    ],
+    "tongue": "舌淡红，苔薄白",
+    "pulse": "脉弦细",
+    "syndrome": "禀赋不耐证",
+    "analysis": "先天禀赋特异，对食物/气息易感，故反复荨麻疹、鼻炎。",
+    "recommendation_summary": "固表扶正、记过敏日记；忌海鲜辛辣；按足三里、肺俞；随身备抗过敏药。"
+  },
+  {
+    "case_id": "case_060",
+    "constitution": "pinghe",
+    "constitution_name": "平和质",
+    "symptoms": [
+      "精力充沛",
+      "睡眠良好",
+      "食欲正常",
+      "二便调",
+      "情绪稳定"
+    ],
+    "tongue": "舌淡红，苔薄白",
+    "pulse": "脉和缓有力",
+    "syndrome": "阴阳调和证",
+    "analysis": "气血调和，脏腑功能协调，故体态适中、精力充沛。",
+    "recommendation_summary": "顺其自然，饮食有节、起居有常，可常按足三里保健。"
+  },
+  {
+    "case_id": "case_061",
+    "constitution": "pinghe",
+    "constitution_name": "平和质",
+    "symptoms": [
+      "面色红润",
+      "声息和畅",
+      "目光有神",
+      "夜眠安和",
+      "适应力强"
+    ],
+    "tongue": "舌淡红，苔薄白",
+    "pulse": "脉从容和缓",
+    "syndrome": "气血充盛证",
+    "analysis": "阴阳气血调和，故面红润、神安、适应力强。",
+    "recommendation_summary": "保持良好作息，适度运动，均衡饮食即可。"
   }
 ]

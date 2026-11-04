@@ -190,6 +190,14 @@ class MCPClient:
             text = getattr(c, 'text', None)
             if text is None:
                 continue
+            # FastMCP 执行工具失败时（参数校验、工具内部异常），错误文本
+            # 以 "Error executing tool xxx: ..." 作为普通 content 返回，
+            # JSON-RPC 层本身成功，直接返回会被上层误判为"调用成功"——
+            # 例如把校验错误字符串当案例列表传进 Agent，导致
+            # 'str' object has no attribute 'get'。这里识别并抛异常，
+            # 让 ToolRegistry 走重试 / 回退本地调用。
+            if isinstance(text, str) and text.lstrip().startswith('Error executing tool'):
+                raise RuntimeError(text.strip()[:300])
             try:
                 return json.loads(text)
             except (json.JSONDecodeError, TypeError):

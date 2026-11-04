@@ -61,6 +61,14 @@ pinghe=平和质, qixu=气虚质, yangxu=阳虚质, yinxu=阴虚质, tanshi=痰�
 4. 给出主体质、可能的兼夹体质、证型名、置信度(0-1)。
 5. 若置信度低于阈值({confidence_threshold})，需在 clarification 中给出 1-2 个澄清问题。
 
+【判定硬规则】
+1. 平和质优先：若症状以"无明显不适/状态尚可/精力尚可"为主、无典型不适群，且舌淡红苔薄白、脉和缓或平，应判 pinghe 平和质；仅凭"偶感乏力"一条不得判气虚质。
+2. 湿热质与痰湿质辨析：舌红苔黄腻、口苦口干、小便短黄、面垢油光→湿热质；舌淡胖苔白腻、口中黏腻、痰多清稀、无口苦尿黄→痰湿质。
+3. 湿热质与气郁质辨析：面垢油光、易生痤疮、苔黄腻、小便短黄→湿热质；情志抑郁、善太息、胁肋胀满、苔薄白、症状随情绪波动→气郁质。
+4. 体质混淆（两种体质证据相当、top 案例分数接近）时主动降低 confidence，并在 clarification 中提示补充舌脉信息，不得硬判单一体质。
+
+{dynamic_example}
+
 【Few-shot 示例】
 输入症状：["容易疲乏", "气短懒言", "自汗"]；舌象：舌淡红有齿痕；脉象：脉虚细
 RAG召回案例：
@@ -82,6 +90,16 @@ RAG召回案例：无高重叠案例
 输出：
 {{"constitution": null, "constitution_name": null, "secondary": [], "syndrome": null, "confidence": 0.3, "reasoning": "症状模糊且缺舌脉，无法定位体质", "clarification": ["您所说的累是活动后加重还是休息时也累？", "请描述舌象颜色与是否有齿痕"]}}
 
+输入症状：["偶感乏力", "睡眠一般", "饮食尚可", "无明显不适"]；舌象：舌淡红，苔薄白；脉象：脉平偏弱
+RAG召回案例：
+- 案例1：气虚质-脾气亏虚证，症状重叠1项
+思考：
+- "乏力"单条不足以定位气虚，其余症状为"无明显不适/饮食尚可"。
+- 舌淡红苔薄白、脉平，支持平和质。
+- RAG 仅重叠1项，证据不足，不应强判气虚——这是"症状重叠≠诊断成立"的典型负例。
+输出：
+{{"constitution": "pinghe", "constitution_name": "平和质", "secondary": [], "syndrome": "气血充盛证", "confidence": 0.78, "reasoning": "无典型不适群且舌脉平和，按硬规则判平和质，不因单条乏力强判气虚", "clarification": null}}
+
 输入症状：{symptoms}
 舌象：{tongue}
 脉象：{pulse}
@@ -99,6 +117,8 @@ PLAN_AGENT_PROMPT = """你是中医辨证问诊流程中的【方案生成Agent�
 
 【输出要求】严格JSON，包含 acupoints/foods/exercises 三类推荐，每项需含 reason 字段说明选取依据。
 若上游体质未确定(为null)，直接返回 {{"status": "pending", "plan": null}}。
+
+{confusion_note}
 
 【Few-shot 示例】
 体质：气虚质；证型：脾气亏虚证

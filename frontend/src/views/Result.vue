@@ -1,6 +1,8 @@
 <!-- frontend/src/views/Result.vue -->
 <template>
   <div class="space-y-6" v-if="result">
+    <!-- 医疗免责声明（合规） -->
+    <MedicalDisclaimer />
     <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
       <router-link to="/" class="text-primary hover:text-secondary flex items-center font-serif text-lg">
         <ArrowLeft class="w-5 h-5 mr-2" /> 重新辨识
@@ -576,9 +578,10 @@
 <script setup>
 import { ref, reactive, onMounted, onUnmounted, nextTick, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import * as echarts from 'echarts'
+import echarts from '@/utils/echarts'
 import GraphChart from '@/components/GraphChart.vue'
 import AgentChatPanel from '@/components/AgentChatPanel.vue'
+import MedicalDisclaimer from '@/components/MedicalDisclaimer.vue'
 import { useAgentChatStore } from '@/store/agentChat'
 import {
   ArrowLeft,

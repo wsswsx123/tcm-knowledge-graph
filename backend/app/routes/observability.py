@@ -48,7 +48,16 @@ def ready():
     checks['llm_backend'] = hub.get('llm_backend', 'unknown')
     checks['tool_mode'] = hub.get('tool_mode', 'local')
 
-    ready_ok = checks['mysql'] == 'ok' and checks['neo4j'] == 'ok' and checks['rag'] == 'ok'
+    # 预热状态（重资源异步加载，未完成前不接收流量）
+    from .. import get_warmup_state
+    warm = get_warmup_state()
+    checks['warmup'] = warm['status']
+    if warm.get('error'):
+        checks['warmup_error'] = warm['error']
+
+    warmed = warm['status'] in ('done', 'skipped')
+    ready_ok = (checks['mysql'] == 'ok' and checks['neo4j'] == 'ok'
+                and checks['rag'] == 'ok' and warmed)
     status = 'ok' if ready_ok else 'degraded'
     return jsonify({'status': status, 'checks': checks}), (200 if ready_ok else 503)
 

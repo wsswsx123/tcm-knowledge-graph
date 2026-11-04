@@ -1,4 +1,5 @@
 # backend/app/config.py
+import json
 import os
 import sys
 import secrets
@@ -24,6 +25,11 @@ class Config:
         'LOG_FILE',
         os.path.join(_BACKEND_DIR, 'logs', 'app.log')
     )
+    # 异步落盘：请求线程只入队，避免访问日志的同步写盘串行化所有请求
+    # （测试环境关闭，保证日志即时可断言、不残留后台线程）
+    LOG_ASYNC_ENABLED = os.environ.get(
+        'LOG_ASYNC_ENABLED', 'false' if APP_ENV == 'test' else 'true'
+    ).lower() == 'true'
 
     # MySQL configuration
     SQLALCHEMY_DATABASE_URI = os.environ.get(
@@ -37,13 +43,25 @@ class Config:
     NEO4J_USER = os.environ.get('NEO4J_USER', 'neo4j')
     NEO4J_PASSWORD = os.environ.get('NEO4J_PASSWORD', 'password')
 
-    # Secret key：未配置时随机生成（会话重启即失效，但避免硬编码密钥）
+    # Secret key：未配置时开发环境随机生成；生产环境直接拒绝启动（多 worker 下各进程
+    # 随机密钥不一致会导致 JWT 时好时坏，这类 bug 极难排查，必须 fail fast）
     SECRET_KEY = os.environ.get('SECRET_KEY')
     if not SECRET_KEY:
+        if APP_ENV == 'production':
+            raise RuntimeError(
+                "生产环境(APP_ENV=production)必须通过环境变量 SECRET_KEY 设置密钥，"
+                "拒绝使用随机密钥启动（JWT 将跨进程/跨重启失效）。"
+            )
         SECRET_KEY = secrets.token_hex(32)
         logger.warning(
             "SECRET_KEY 未配置，已随机生成（重启后会话失效）。生产环境请通过环境变量设置。"
         )
+
+    # ===== 管理员引导 =====
+    # 应用启动时若该用户名不存在，则自动创建为管理员（角色 role='admin'），
+    # 密码取 ADMIN_PASSWORD；未设置 ADMIN_PASSWORD 时生成随机密码并打印到日志。
+    ADMIN_USERNAME = os.environ.get('ADMIN_USERNAME', 'admin')
+    ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', '')
 
     # AI model configuration
     MODEL_PATH_QWEN = os.environ.get(
@@ -56,18 +74,29 @@ class Config:
     # LangChain 使用的 Ollama 基础地址（不含 /api/generate）
     OLLAMA_BASE_URL = os.environ.get('OLLAMA_BASE_URL', 'http://localhost:11434')
     OLLAMA_MODEL = os.environ.get('OLLAMA_MODEL', 'qwen2.5:3b')
+    # 任务名 -> Ollama 模型名映射（JSON）。未配置的任务回退 OLLAMA_MODEL。
+    # 例：OLLAMA_MODEL_MAP={"qwen":"qwen2.5:3b","sunsimiao":"sunsimiao:latest"}
+    # 注意：不要用 OLLAMA_MODELS 这个名字——它是 Ollama 自身的环境变量（模型目录），
+    # 共用会导致每次启动都把目录路径当 JSON 解析并告警。
+    OLLAMA_MODEL_MAP = {}
+    _raw_model_map = os.environ.get('OLLAMA_MODEL_MAP', '')
+    if _raw_model_map.strip().startswith('{'):
+        try:
+            OLLAMA_MODEL_MAP = json.loads(_raw_model_map)
+        except (ValueError, TypeError) as e:
+            logger.warning(f"OLLAMA_MODEL_MAP 配置不是合法 JSON，忽略: {e}")
 
     # ===== 多 Agent 架构配置 =====
     # 置信度阈值，低于该值触发反问澄清而非直接给出结论
     CONFIDENCE_THRESHOLD = float(os.environ.get('CONFIDENCE_THRESHOLD', '0.6'))
     # 工具调用失败自动重试次数
     TOOL_MAX_RETRIES = int(os.environ.get('TOOL_MAX_RETRIES', '3'))
-    # 工具调用超时（秒）
-    # 注意：MCP Server 冷启动时会 lazy import torch/sentence-transformers/py2neo/FAISS +
-    # 加载 bge-small-zh-v1.5 句向量模型，首包耗时 12~20s（GPU 环境）。
-    # 若设置过小，首条用户消息里的工具调用会被 TimeoutError 切断，回退本地（同样要再初始化一次），
-    # 总共让用户等待 15+8≈23s，并产生一堆"工具调用失败"红日志。
-    TOOL_TIMEOUT = float(os.environ.get('TOOL_TIMEOUT', '60.0'))
+    # 单次工具调用超时（秒）。默认 10s：稳态下 MCP/本地调用均为毫秒级；
+    # MCP Server 冷启动资源（torch/句向量/FAISS）由连接期 warmup 预热承担，
+    # 不依赖单次调用长超时；MCP 超时后会自动回退本地 callable 一次。
+    TOOL_TIMEOUT = float(os.environ.get('TOOL_TIMEOUT', '10.0'))
+    # 单轮工具调用总预算（F3）：跨重试累计耗时封顶，超时类错误不重试
+    TOOL_TOTAL_BUDGET = float(os.environ.get('TOOL_TOTAL_BUDGET', '25.0'))
     # 单轮推理目标延迟（秒），用于评测对照
     INFERENCE_LATENCY_TARGET = float(os.environ.get('INFERENCE_LATENCY_TARGET', '3.0'))
 
@@ -78,6 +107,10 @@ class Config:
         'EMBEDDING_MODEL',
         os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'bge-small-zh-v1.5')
     )
+    # 向量后端选择：auto（优先句向量，失败回退 TF-IDF）| sentence-transformer | tfidf
+    # 注意：想用 TF-IDF 必须设这里，而不是把 EMBEDDING_MODEL 写成 'tfidf'
+    # （后者会被当作 HF 模型名去联网解析，单次加载可能挂数分钟）
+    EMBEDDING_BACKEND = os.environ.get('EMBEDDING_BACKEND', 'auto').strip().lower()
     # 案例库与向量索引存储目录
     RAG_DATA_DIR = os.environ.get(
         'RAG_DATA_DIR',
@@ -87,6 +120,10 @@ class Config:
 
     # Function Calling 最大轮次（bind_tools 循环）
     TOOL_CALLING_MAX_ROUNDS = int(os.environ.get('TOOL_CALLING_MAX_ROUNDS', '3'))
+    # 普通 Agent（症状/体质/追问）单次输出 token 上限
+    LLM_MAX_TOKENS = int(os.environ.get('LLM_MAX_TOKENS', '512'))
+    # 方案生成 Agent 单次输出 token 上限（多段 JSON，需更大空间避免截断落回静态模板）
+    PLAN_MAX_TOKENS = int(os.environ.get('PLAN_MAX_TOKENS', '1024'))
     # Ollama 不可用时是否尝试本地 Transformers 权重（体积大，默认关闭）
     USE_LOCAL_QWEN_FALLBACK = os.environ.get('USE_LOCAL_QWEN_FALLBACK', 'false').lower() == 'true'
 
@@ -103,6 +140,15 @@ class Config:
     )
 
     # ===== 安全 =====
+    # ===== 启动预热（Warmup）=====
+    # 重资源（Neo4j 连接探测 / 向量库加载 / MCP 子进程）不再阻塞 create_app，
+    # 改为启动后台预热或首个请求惰性加载，避免启动耗时随模型体积线性增长。
+    WARMUP_ENABLED = os.environ.get(
+        'WARMUP_ENABLED', 'false' if APP_ENV == 'test' else 'true'
+    ).lower() == 'true'
+    # 是否异步预热。false 表示 create_app 内同步预热（仅建议脚本/离线任务使用）
+    WARMUP_ASYNC = os.environ.get('WARMUP_ASYNC', 'true').lower() == 'true'
+
     # 是否强制 JWT 鉴权（true 时 /api/agents/* 等需登录；默认 false 便于 Demo 开箱即用）
     AUTH_REQUIRED = os.environ.get('AUTH_REQUIRED', 'false').lower() == 'true'
     # CORS 允许来源：* 或逗号分隔的 origin 列表（生产请限定）
@@ -129,6 +175,63 @@ class Config:
     # 切换云端 API 时按服务商定价在 .env 配置，如 DeepSeek 输入 0.001。
     LLM_PRICE_INPUT_PER_1K = float(os.environ.get('LLM_PRICE_INPUT_PER_1K', '0'))
     LLM_PRICE_OUTPUT_PER_1K = float(os.environ.get('LLM_PRICE_OUTPUT_PER_1K', '0'))
+
+    # ===== 检索层增强（Query 多变体检索，P2-1）=====
+    # 是否启用多变体检索：RAG top1 相似度低于阈值时生成症状同义变体再次检索并并集重排
+    RAG_MULTI_QUERY_ENABLED = os.environ.get('RAG_MULTI_QUERY_ENABLED', 'true').lower() == 'true'
+    # top1 相似度低于该值才触发多变体检索
+    RAG_MULTI_QUERY_MIN_SCORE = float(os.environ.get('RAG_MULTI_QUERY_MIN_SCORE', '0.40'))
+    # 多变体数量上限
+    RAG_MULTI_QUERY_VARIANTS = int(os.environ.get('RAG_MULTI_QUERY_VARIANTS', '2'))
+    # 多变体检索的并集上限（从多路结果中去重后最多取多少条）
+    RAG_MULTI_QUERY_MAX_POOL = int(os.environ.get('RAG_MULTI_QUERY_MAX_POOL', '10'))
+
+    # ===== 体质混淆双判（P1-2）=====
+    # top1 与 top2 相似度分差小于该值且体质不同时，判定为"体质混淆"并做置信度降级
+    CONFUSION_GAP = float(os.environ.get('CONFUSION_GAP', '0.05'))
+    # 混淆时的置信度衰减系数
+    CONFUSION_CONFIDENCE_DECAY = float(os.environ.get('CONFUSION_CONFIDENCE_DECAY', '0.9'))
+
+    # ===== RAG 证据占优仲裁（检索护栏：LLM 判定与强检索证据冲突时以证据为准）=====
+    # RAG top1 相似度不低于该值视为"强证据"；与 LLM 判定冲突且 LLM 置信不足时改判为检索证据
+    RAG_AUTHORITY_ENABLED = os.environ.get('RAG_AUTHORITY_ENABLED', 'true').lower() == 'true'
+    # 强证据阈值：top1 相似度 >= 该值才允许仲裁
+    RAG_AUTHORITY_SCORE = float(os.environ.get('RAG_AUTHORITY_SCORE', '0.60'))
+    # LLM 自身置信度上限：低于该值（模型不够确信）才允许检索证据改判；高置信判定保持
+    RAG_AUTHORITY_LLM_CEIL = float(os.environ.get('RAG_AUTHORITY_LLM_CEIL', '0.90'))
+
+    # ===== 上下文预算与历史截断（P1-3）=====
+    # 超过该轮次（以用户消息计）后，把早期对话压缩为摘要（保留首条 guardrail 与最近 N 轮）
+    MAX_HISTORY_TURNS = int(os.environ.get('MAX_HISTORY_TURNS', '6'))
+    # 是否启用历史压缩
+    HISTORY_COMPRESS_ENABLED = os.environ.get('HISTORY_COMPRESS_ENABLED', 'true').lower() == 'true'
+
+    # ===== 人工接管通道（P1-5）=====
+    # 连续拒答达到该次数后，在响应中返回 escalate 提示（建议转人工 / 重新测评）
+    REJECT_ESCALATION_THRESHOLD = int(os.environ.get('REJECT_ESCALATION_THRESHOLD', '3'))
+
+    # ===== Tool Retriever（P2-2）=====
+    # 工具数超过该阈值时启用工具检索（当前 6 个不触发，为 30+ 工具规模预留）
+    TOOL_RETRIEVER_ENABLED = os.environ.get('TOOL_RETRIEVER_ENABLED', 'true').lower() == 'true'
+    TOOL_RETRIEVER_TRIGGER = int(os.environ.get('TOOL_RETRIEVER_TRIGGER', '10'))
+    # 工具检索每次注入 bind_tools 的工具数
+    TOOL_RETRIEVER_TOOLS = int(os.environ.get('TOOL_RETRIEVER_TOOLS', '5'))
+
+    # ===== 检索式动态示例（P2-6）=====
+    # 体质推理 Agent 是否启用"检索式示例库"：从案例库召回 top1 作为临时 Few-shot 示例
+    DYNAMIC_FEWSHOT_ENABLED = os.environ.get('DYNAMIC_FEWSHOT_ENABLED', 'true').lower() == 'true'
+    # 动态示例条数
+    DYNAMIC_FEWSHOT_TOP_K = int(os.environ.get('DYNAMIC_FEWSHOT_TOP_K', '1'))
+
+    # ===== 用户行为埋点（P2-4）=====
+    # 前端是否上报用户侧行为（重复提问/重置退出）
+    USER_EVENT_ENABLED = os.environ.get('USER_EVENT_ENABLED', 'true').lower() == 'true'
+
+    # ===== 步骤级 Checkpoint（P2-5）=====
+    # 是否启用子 Agent 步骤级 checkpoint（中断恢复用）
+    CHECKPOINT_ENABLED = os.environ.get('CHECKPOINT_ENABLED', 'true').lower() == 'true'
+    # 中断后自动恢复重试的最大次数
+    CHECKPOINT_RETRY_ON_ERROR = int(os.environ.get('CHECKPOINT_RETRY_ON_ERROR', '1'))
 
 
 def _warn_default_secrets():

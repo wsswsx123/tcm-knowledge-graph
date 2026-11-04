@@ -1,5 +1,7 @@
 <template>
   <div class="space-y-8 pb-20">
+    <!-- 医疗免责声明（合规） -->
+    <MedicalDisclaimer />
     <!-- 未登录状态 -->
     <div v-if="!userStore.user" class="bg-white rounded-sm shadow-lg p-12 border border-border text-center mt-10">
       <h2 class="text-3xl font-serif font-bold text-secondary mb-6 tracking-widest">调理方案推荐</h2>
@@ -212,6 +214,7 @@ import { ref, onMounted, computed, onUnmounted } from 'vue'
 import { useUserStore } from '@/store'
 import { ArrowRight, Wind, Apple, Activity, Sparkles } from 'lucide-vue-next'
 import axios from '@/api'
+import MedicalDisclaimer from '@/components/MedicalDisclaimer.vue'
 import { marked } from 'marked'   // 需要安装: npm install marked
 
 const userStore = useUserStore()

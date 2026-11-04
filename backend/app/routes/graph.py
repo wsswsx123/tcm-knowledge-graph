@@ -1,5 +1,7 @@
-from flask import Blueprint, jsonify, current_app
+from flask import Blueprint, jsonify
 import json
+
+from ..services.neo4j_client import get_graph
 
 bp = Blueprint('graph', __name__, url_prefix='/api/graph')
 
@@ -65,7 +67,9 @@ def get_full_graph():
     获取完整知识图谱：所有节点及其关系。
     """
     try:
-        graph = current_app.neo4j_graph
+        graph = get_graph()
+        if graph is None:
+            return jsonify({'error': '知识图谱服务暂不可用，请稍后重试'}), 503
         query = "MATCH (n) OPTIONAL MATCH (n)-[r]->(m) RETURN n, r, m"
         data = graph.run(query).data()
         nodes, links = process_graph_data(data)
@@ -81,7 +85,9 @@ def get_constitution_graph(constitution):
     获取特定体质的关联图谱（体质节点及其一度关联的节点和关系）。
     """
     try:
-        graph = current_app.neo4j_graph
+        graph = get_graph()
+        if graph is None:
+            return jsonify({'error': '知识图谱服务暂不可用，请稍后重试'}), 503
         node_id = f"c_{constitution}"
         query = "MATCH (c:Constitution {id: $node_id})-[r]-(n) RETURN c, r, n"
         data = graph.run(query, node_id=node_id).data()

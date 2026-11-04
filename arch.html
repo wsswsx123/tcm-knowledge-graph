@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>中医体质辨识系统 - 架构与流程图</title>
+<style>
+  body { font-family: "Microsoft YaHei", sans-serif; background: #faf8f3; margin: 0; padding: 30px; color: #3d3226; }
+  h1 { text-align: center; color: #6b4423; margin-bottom: 8px; }
+  .sub { text-align: center; color: #8b7355; margin-bottom: 30px; font-size: 14px; }
+  .chart { background: #fff; border: 1px solid #e5d9c5; border-radius: 8px; padding: 24px; margin-bottom: 40px; box-shadow: 0 2px 8px rgba(107,68,35,0.08); }
+  .chart h2 { color: #6b4423; border-left: 4px solid #b8860b; padding-left: 10px; margin-top: 0; }
+  svg { width: 100%; height: auto; display: block; }
+</style>
+</head>
+<body>
+<h1>中医体质辨识与养生推荐系统</h1>
+<p class="sub">运行时流程图 & 技术栈/搭建/优化全景</p>
+
+<!-- ========== 图1：运行时流程图 ========== -->
+<div class="chart">
+<h2>图 1 · 运行时请求流程图</h2>
+<svg viewBox="0 0 1200 900" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="arr" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L9,3 z" fill="#8b7355"/>
+    </marker>
+    <style>
+      .box { fill: #fff8ec; stroke: #b8860b; stroke-width: 1.5; rx: 6; }
+      .box2 { fill: #eef4ea; stroke: #556b2f; stroke-width: 1.5; }
+      .box3 { fill: #eaf1f8; stroke: #4682b4; stroke-width: 1.5; }
+      .box4 { fill: #fdf0e8; stroke: #c0392b; stroke-width: 1.5; }
+      .lbl { font-size: 13px; fill: #3d3226; text-anchor: middle; font-weight: bold; }
+      .sub2 { font-size: 11px; fill: #6b5c51; text-anchor: middle; }
+      .arrow { stroke: #8b7355; stroke-width: 1.5; fill: none; marker-end: url(#arr); }
+      .dashed { stroke-dasharray: 5,4; }
+    </style>
+  </defs>
+
+  <!-- 用户层 -->
+  <rect x="480" y="20" width="240" height="50" class="box" rx="6"/>
+  <text x="600" y="42" class="lbl">用户浏览器</text>
+  <text x="600" y="60" class="sub2">Vue 3 + Vite SPA (localhost:5173)</text>
+
+  <!-- 前端 -->
+  <rect x="420" y="100" width="360" height="70" class="box" rx="6"/>
+  <text x="600" y="125" class="lbl">前端 SPA</text>
+  <text x="600" y="143" class="sub2">Pinia store · Vue Router · Axios</text>
+  <text x="600" y="158" class="sub2">Tailwind + ECharts + Lucide 图标</text>
+
+  <line x1="600" y1="70" x2="600" y2="100" class="arrow"/>
+
+  <!-- Vite 代理 -->
+  <rect x="450" y="200" width="300" height="40" class="box2" rx="6"/>
+  <text x="600" y="225" class="lbl">Vite 代理 /api → Flask:5000</text>
+  <line x1="600" y1="170" x2="600" y2="200" class="arrow"/>
+
+  <!-- Flask -->
+  <rect x="380" y="270" width="440" height="60" class="box3" rx="6"/>
+  <text x="600" y="295" class="lbl">Flask REST API (app/routes/)</text>
+  <text x="600" y="315" class="sub2">auth · assessment · recommend · graph · agents · admin</text>
+  <line x1="600" y1="240" x2="600" y2="270" class="arrow"/>
+
+  <!-- MasterAgent -->
+  <rect x="380" y="360" width="440" height="60" class="box3" rx="6"/>
+  <text x="600" y="385" class="lbl">MasterAgent 主控仲裁</text>
+  <text x="600" y="405" class="sub2">意图路由 · 会话状态 · 上下文压缩 · 漂移检测</text>
+  <line x1="600" y1="330" x2="600" y2="360" class="arrow"/>
+
+  <!-- 三级 Agent -->
+  <rect x="80" y="460" width="320" height="90" class="box" rx="6"/>
+  <text x="240" y="485" class="lbl">① SymptomAgent</text>
+  <text x="240" y="503" class="sub2">规则提取：个性化约束</text>
+  <text x="240" y="518" class="sub2">禁忌/偏好/当前状态</text>
+  <text x="240" y="538" class="sub2">（零延迟，不调 LLM）</text>
+
+  <rect x="440" y="460" width="320" height="90" class="box" rx="6"/>
+  <text x="600" y="485" class="lbl">② DriftAgent 漂移检测</text>
+  <text x="600" y="503" class="sub2">对比 locked 体质 vs 近期症状</text>
+  <text x="600" y="518" class="sub2">反向命中 ≥2 → 提示重测</text>
+  <text x="600" y="538" class="sub2">（规则，不自己改判定）</text>
+
+  <rect x="800" y="460" width="320" height="90" class="box" rx="6"/>
+  <text x="960" y="485" class="lbl">③ PlanRefineAgent</text>
+  <text x="960" y="503" class="sub2">在已有方案上裁剪</text>
+  <text x="960" y="518" class="sub2">✅保留 / ⚠️暂停 / 🔄替换</text>
+  <text x="960" y="538" class="sub2">替代项锚定知识图谱</text>
+
+  <line x1="480" y1="420" x2="240" y2="460" class="arrow"/>
+  <line x1="600" y1="420" x2="600" y2="460" class="arrow"/>
+  <line x1="720" y1="420" x2="960" y2="460" class="arrow"/>
+
+  <!-- 数据层 -->
+  <rect x="80" y="600" width="320" height="80" class="box2" rx="6"/>
+  <text x="240" y="625" class="lbl">MySQL 8.0</text>
+  <text x="240" y="643" class="sub2">用户 / 题目 / 测评结果</text>
+  <text x="240" y="658" class="sub2">JWT 鉴权 · SQLAlchemy ORM</text>
+
+  <rect x="440" y="600" width="320" height="80" class="box2" rx="6"/>
+  <text x="600" y="625" class="lbl">Neo4j 4.4+</text>
+  <text x="600" y="643" class="sub2">体质/穴位/食材/运动知识图谱</text>
+  <text x="600" y="658" class="sub2">Cypher 查询 · grounding 实体锚定</text>
+
+  <rect x="800" y="600" width="320" height="80" class="box2" rx="6"/>
+  <text x="960" y="625" class="lbl">Ollama / Qwen2.5-3B</text>
+  <text x="960" y="643" class="sub2">LLM 解释/追问/方案增强</text>
+  <text x="960" y="658" class="sub2">LangChain Function Calling</text>
+
+  <line x1="240" y1="550" x2="240" y2="600" class="arrow dashed"/>
+  <line x1="600" y1="550" x2="600" y2="600" class="arrow dashed"/>
+  <line x1="960" y1="550" x2="960" y2="600" class="arrow dashed"/>
+
+  <!-- RAG / FAISS -->
+  <rect x="200" y="720" width="340" height="70" class="box4" rx="6"/>
+  <text x="370" y="745" class="lbl">RAG 案例库 + FAISS 向量检索</text>
+  <text x="370" y="763" class="sub2">sentence-transformer 句向量</text>
+  <text x="370" y="778" class="sub2">相似案例召回 → 辅助推理</text>
+
+  <rect x="660" y="720" width="340" height="70" class="box4" rx="6"/>
+  <text x="830" y="745" class="lbl">MCP Server (stdio)</text>
+  <text x="830" y="763" class="sub2">4 个工具：穴位/食材/案例/方案</text>
+  <text x="830" y="778" class="sub2">MCP 失败 → 本地函数 fallback</text>
+
+  <line x1="370" y1="680" x2="370" y2="720" class="arrow dashed"/>
+  <line x1="830" y1="680" x2="830" y2="720" class="arrow dashed"/>
+
+  <!-- 底部容错条 -->
+  <rect x="80" y="820" width="1040" height="60" class="box4" rx="6"/>
+  <text x="600" y="845" class="lbl">五级容错降级（全程保留）</text>
+  <text x="600" y="865" class="sub2">LLM不可用→规则模板 · 工具失败→本地调用 · Neo4j挂→kg_fallback · 漂移拿不准→引导重测不硬判 · MCP挂→回退本地</text>
+</svg>
+</div>
+
+<!-- ========== 图2：技术栈与搭建/优化全景 ========== -->
+<div class="chart">
+<h2>图 2 · 技术栈 / 搭建过程 / 优化点全景</h2>
+<svg viewBox="0 0 1200 950" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="arr2" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L9,3 z" fill="#8b7355"/>
+    </marker>
+    <style>
+      .layer { fill: #fff8ec; stroke: #6b4423; stroke-width: 1.5; rx: 6; }
+      .tech { fill: #fff; stroke: #b8860b; stroke-width: 1; }
+      .lbl { font-size: 14px; fill: #3d3226; text-anchor: middle; font-weight: bold; }
+      .techLbl { font-size: 12px; fill: #3d3226; text-anchor: middle; font-weight: bold; }
+      .techSub { font-size: 10.5px; fill: #6b5c51; text-anchor: middle; }
+      .opt { fill: #eef4ea; stroke: #556b2f; stroke-width: 1; }
+      .optLbl { font-size: 11.5px; fill: #2d5016; text-anchor: start; }
+    </style>
+  </defs>
+
+  <!-- 标题分层 -->
+  <text x="600" y="25" class="lbl" style="font-size:16px;">从下往上：基础设施 → 数据层 → 模型层 → 服务层 → 前端层</text>
+
+  <!-- 前端层 -->
+  <rect x="40" y="50" width="1120" height="110" class="layer" rx="6"/>
+  <text x="80" y="75" class="lbl" text-anchor="start">前端表现层</text>
+  <rect x="60" y="90" width="150" height="55" class="tech" rx="4"/>
+  <text x="135" y="112" class="techLbl">Vue 3 + Vite</text>
+  <text x="135" y="130" class="techSub">Composition API</text>
+  <rect x="225" y="90" width="150" height="55" class="tech" rx="4"/>
+  <text x="300" y="112" class="techLbl">Pinia + Vue Router</text>
+  <text x="300" y="130" class="techSub">状态/路由</text>
+  <rect x="390" y="90" width="150" height="55" class="tech" rx="4"/>
+  <text x="465" y="112" class="techLbl">Tailwind CSS</text>
+  <text x="465" y="130" class="techSub">中式配色主题</text>
+  <rect x="555" y="90" width="150" height="55" class="tech" rx="4"/>
+  <text x="630" y="112" class="techLbl">ECharts</text>
+  <text x="630" y="130" class="techSub">体质雷达/饼图</text>
+  <rect x="720" y="90" width="150" height="55" class="tech" rx="4"/>
+  <text x="795" y="112" class="techLbl">D3 / Vis</text>
+  <text x="795" y="130" class="techSub">知识图谱可视化</text>
+  <rect x="885" y="90" width="150" height="55" class="tech" rx="4"/>
+  <text x="960" y="112" class="techLbl">Axios</text>
+  <text x="960" y="130" class="techSub">API 封装/拦截</text>
+
+  <!-- 服务层 -->
+  <rect x="40" y="180" width="1120" height="150" class="layer" rx="6"/>
+  <text x="80" y="205" class="lbl" text-anchor="start">后端服务层 (Flask)</text>
+  <rect x="60" y="220" width="180" height="90" class="tech" rx="4"/>
+  <text x="150" y="242" class="techLbl">三级 Agent 架构</text>
+  <text x="150" y="260" class="techSub">Symptom / Drift / Refine</text>
+  <text x="150" y="275" class="techSub">MasterAgent 主控</text>
+  <text x="150" y="295" class="techSub">CoT 提示词模板</text>
+
+  <rect x="255" y="220" width="180" height="90" class="tech" rx="4"/>
+  <text x="345" y="242" class="techLbl">MCP 工具协议</text>
+  <text x="345" y="260" class="techSub">独立 stdio Server</text>
+  <text x="345" y="275" class="techSub">4 个工具暴露</text>
+  <text x="345" y="295" class="techSub">本地/MCP 双模式</text>
+
+  <rect x="450" y="220" width="180" height="90" class="tech" rx="4"/>
+  <text x="540" y="242" class="techLbl">Function Calling</text>
+  <text x="540" y="260" class="techSub">LangChain bind_tools</text>
+  <text x="540" y="275" class="techSub">LLM 自动调工具</text>
+  <text x="540" y="295" class="techSub">失败回退普通推理</text>
+
+  <rect x="645" y="220" width="180" height="90" class="tech" rx="4"/>
+  <text x="735" y="242" class="techLbl">会话与缓存</text>
+  <text x="735" y="260" class="techSub">Redis / 内存 fallback</text>
+  <text x="735" y="275" class="techSub">高频问答缓存</text>
+  <text x="735" y="295" class="techSub">上下文窗口压缩</text>
+
+  <rect x="840" y="220" width="180" height="90" class="tech" rx="4"/>
+  <text x="930" y="242" class="techLbl">可观测性</text>
+  <text x="930" y="260" class="techSub">结构化 JSON 日志</text>
+  <text x="930" y="275" class="techSub">请求ID透传/限流</text>
+  <text x="930" y="295" class="techSub">/metrics + OpenAPI</text>
+
+  <!-- 模型/RAG 层 -->
+  <rect x="40" y="350" width="1120" height="130" class="layer" rx="6"/>
+  <text x="80" y="375" class="lbl" text-anchor="start">模型与 RAG 层</text>
+  <rect x="60" y="390" width="200" height="70" class="tech" rx="4"/>
+  <text x="160" y="412" class="techLbl">Qwen2.5-3B-Instruct</text>
+  <text x="160" y="430" class="techSub">Ollama 本地部署</text>
+  <text x="160" y="446" class="techSub">解释/追问/方案增强</text>
+
+  <rect x="280" y="390" width="200" height="70" class="tech" rx="4"/>
+  <text x="380" y="412" class="techLbl">sentence-transformer</text>
+  <text x="380" y="430" class="techSub">句向量 embedding</text>
+  <text x="380" y="446" class="techSub">TF-IDF 降级后端</text>
+
+  <rect x="500" y="390" width="200" height="70" class="tech" rx="4"/>
+  <text x="600" y="412" class="techLbl">FAISS 向量库</text>
+  <text x="600" y="430" class="techSub">案例检索 + 持久化</text>
+  <text x="600" y="446" class="techSub">多模态特征拼接</text>
+
+  <rect x="720" y="390" width="200" height="70" class="tech" rx="4"/>
+  <text x="820" y="412" class="techLbl">grounding 幻觉抑制</text>
+  <text x="820" y="430" class="techSub">方案实体锚定图谱</text>
+  <text x="820" y="446" class="techSub">未锚定项自动丢弃</text>
+
+  <rect x="940" y="390" width="200" height="70" class="tech" rx="4"/>
+  <text x="1040" y="412" class="techLbl">置信度校准</text>
+  <text x="1040" y="430" class="techSub">LLM置信 × RAG相似度</text>
+  <text x="1040" y="446" class="techSub">混淆体质 decay</text>
+
+  <!-- 数据层 -->
+  <rect x="40" y="500" width="1120" height="100" class="layer" rx="6"/>
+  <text x="80" y="525" class="lbl" text-anchor="start">数据存储层</text>
+  <rect x="80" y="540" width="280" height="45" class="tech" rx="4"/>
+  <text x="220" y="560" class="techLbl">MySQL 8.0</text>
+  <text x="220" y="577" class="techSub">用户/题目/测评结果/历史记录</text>
+  <rect x="420" y="540" width="280" height="45" class="tech" rx="4"/>
+  <text x="560" y="560" class="techLbl">Neo4j 4.4+</text>
+  <text x="560" y="577" class="techSub">体质-穴位-食材-运动 知识图谱</text>
+  <rect x="760" y="540" width="280" height="45" class="tech" rx="4"/>
+  <text x="900" y="560" class="techLbl">本地文件</text>
+  <text x="900" y="577" class="techSub">向量索引 / 日志 JSONL / 模型权重</text>
+
+  <!-- 优化点 -->
+  <rect x="40" y="620" width="1120" height="300" class="layer" rx="6" style="stroke:#556b2f;"/>
+  <text x="80" y="648" class="lbl" text-anchor="start" style="fill:#2d5016;">关键优化点</text>
+
+  <rect x="60" y="665" width="540" height="240" fill="#fff" stroke="#556b2f" rx="4"/>
+  <text x="80" y="690" class="techLbl" text-anchor="start">架构层面</text>
+  <text x="80" y="715" class="optLbl">• 三级 Agent 协同：症状提取 → 漂移检测 → 方案裁剪，职责单一</text>
+  <text x="80" y="738" class="optLbl">• MasterAgent 仲裁：意图路由 + 状态机 + checkpoint 中断恢复</text>
+  <text x="80" y="761" class="optLbl">• 问卷锁定体质：Agent 不辨证，只做个性化裁剪，避免幻觉</text>
+  <text x="80" y="784" class="optLbl">• 漂移检测：规则对比 locked 体质 vs 近期症状，提示重测</text>
+  <text x="80" y="807" class="optLbl">• 口语化叙述层 narrator：结构化结果翻译成医生聊天语气</text>
+  <text x="80" y="830" class="optLbl">• 五级容错降级：LLM/工具/Neo4j/MCP/置信度 各层独立兜底</text>
+  <text x="80" y="853" class="optLbl">• RAG 证据占优仲裁：LLM 与召回冲突时，强证据采纳检索结果</text>
+  <text x="80" y="876" class="optLbl">• 上下文压缩：历史超窗自动摘要，避免 token 爆炸</text>
+
+  <rect x="620" y="665" width="520" height="240" fill="#fff" stroke="#556b2f" rx="4"/>
+  <text x="640" y="690" class="techLbl" text-anchor="start">工程与性能</text>
+  <text x="640" y="715" class="optLbl">• 高频问答缓存：高置信方案 TTL 复用，零 LLM 延迟</text>
+  <text x="640" y="738" class="optLbl">• MCP 工具协议：独立 stdio Server，失败自动回退本地</text>
+  <text x="640" y="761" class="optLbl">• grounding 实体锚定：生成方案必须命中图谱，未命中即丢弃</text>
+  <text x="640" y="784" class="optLbl">• 规则降级：LLM 不可用时关键词模板兜底，服务不中断</text>
+  <text x="640" y="807" class="optLbl">• 50 例临床样本评测脚本：幻觉率/拒答率/延迟 自动化回归</text>
+  <text x="640" y="830" class="optLbl">• Docker Compose 一键编排：MySQL/Neo4j/Ollama/前后端</text>
+  <text x="640" y="853" class="optLbl">• 结构化 JSON 日志 + 请求ID 透传，全链路可追踪</text>
+  <text x="640" y="876" class="optLbl">• JWT 鉴权 + 限流 + OpenAPI 文档，生产可用基线</text>
+</svg>
+</div>
+
+</body>
+</html>

@@ -85,15 +85,36 @@ class TfidfBackend(EmbeddingBackend):
         return (mat / norms).astype('float32')
 
 
-def build_embedding_backend(model_name: str = None, fit_texts: List[str] = None) -> EmbeddingBackend:
-    """优先 sentence-transformers，失败则 fallback 到 TF-IDF。"""
+def build_embedding_backend(model_name: str = None, fit_texts: List[str] = None,
+                            backend: str = None) -> EmbeddingBackend:
+    """构建向量编码后端。
+
+    backend 选择顺序（显式 > 配置 > 自动）：
+    - 'tfidf'：直接走 TF-IDF，不碰 sentence-transformers（离线/测试/CI 用）
+    - 'sentence-transformer' / 'st'：强制句向量，失败仍回退 TF-IDF 以免服务不可用
+    - 'auto'（默认）：优先句向量，失败回退 TF-IDF
+
+    注意不要再把 EMBEDDING_MODEL 写成 'tfidf' —— 那会被当成 HF 模型名去联网解析，
+    单次加载可能阻塞数分钟（本项目曾因此出现 create_app 耗时 256s）。
+    """
     model_name = model_name or getattr(Config, 'EMBEDDING_MODEL', 'BAAI/bge-small-zh-v1.5')
+    choice = (backend or getattr(Config, 'EMBEDDING_BACKEND', 'auto') or 'auto').strip().lower()
+
+    # 兼容旧行为：模型名被误写成 tfidf 时按 TF-IDF 处理，避免联网解析
+    if choice == 'auto' and str(model_name).strip().lower() == 'tfidf':
+        choice = 'tfidf'
+
+    if choice in ('tfidf', 'tf-idf'):
+        tfidf = TfidfBackend()
+        if fit_texts:
+            tfidf.fit(fit_texts)
+        return tfidf
+
     try:
-        backend = SentenceTransformerBackend(model_name)
-        return backend
+        return SentenceTransformerBackend(model_name)
     except Exception as e:
         logger.warning(f"sentence-transformers 加载失败({e})，回退到 TF-IDF 后端")
-        backend = TfidfBackend()
+        fallback = TfidfBackend()
         if fit_texts:
-            backend.fit(fit_texts)
-        return backend
+            fallback.fit(fit_texts)
+        return fallback

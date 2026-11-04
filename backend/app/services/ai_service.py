@@ -64,8 +64,12 @@ class QwenTCMService:
 
     def _generate_ollama(self, prompt: str, max_tokens: int = 256, temperature: float = 0.7) -> str:
         import requests
+        # 模型名统一读配置（OLLAMA_MODEL），不再硬编码——换模型只需改 .env
+        ollama_models = getattr(Config, 'OLLAMA_MODEL_MAP', None) or {
+            'qwen': getattr(Config, 'OLLAMA_MODEL', 'qwen2.5:3b')}
+        model = ollama_models.get(self.model_name) or getattr(Config, 'OLLAMA_MODEL', 'qwen2.5:3b')
         payload = {
-            "model": "qwen2.5:3b" if self.model_name == 'qwen' else "sunsimiao:latest",
+            "model": model,
             "prompt": prompt,
             "stream": False,
             "options": {"max_tokens": max_tokens, "temperature": temperature, "top_p": 0.9}

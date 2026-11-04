@@ -4,6 +4,7 @@ from ..models.mysql_models import db, Question, AssessmentResult, User, UserAnsw
 from ..services.constitution import calculate_constitution
 from ..services.rag_service import KGRetriever
 from ..services.ai_service import get_ai_service   # 使用统一的服务获取函数
+from ..services.neo4j_client import get_graph
 from ..utils.security import token_required
 import logging
 
@@ -140,15 +141,17 @@ def get_session_answers(session_id):
 
 
 @bp.route('/assessment/submit', methods=['POST'])
+@token_required
 def submit():
     data = request.json
     answers = data.get('answers')
-    user_id = data.get('userId')
     session_id = data.get('sessionId')
 
     if not answers:
         return jsonify({'error': '缺少答案数据'}), 400
 
+    # 用户身份以 JWT 为准，不再信任请求体中的 userId（防止伪造他人 ID 提交）
+    user_id = _current_user_id() or data.get('userId')
     if user_id:
         user = User.query.get(user_id)
         if not user:
@@ -159,8 +162,9 @@ def submit():
     logger.info(f"体质计算结果: primary={result['primary']}, secondary={result['secondary']}")
 
     # 从 Neo4j 获取基础推荐
-    kg_retriever = KGRetriever(current_app.neo4j_graph)
-    base_recs = kg_retriever.get_recommendations(result['primary'])
+    graph = get_graph()
+    kg_retriever = KGRetriever(graph)
+    base_recs = kg_retriever.get_recommendations(result['primary']) if graph else {}
     logger.info(f"基础推荐: acupoints={len(base_recs.get('acupoints', []))}, "
                 f"foods={len(base_recs.get('foods', []))}, "
                 f"exercises={len(base_recs.get('exercises', []))}")
@@ -236,10 +240,15 @@ def submit():
 
 
 @bp.route('/assessment/<int:id>', methods=['GET'])
+@token_required
 def get_result(id):
     ar = AssessmentResult.query.get(id)
     if not ar:
         return jsonify({'error': '结果不存在'}), 404
+    # 归属校验：结果关联了用户时，仅本人可查（匿名测评保持可查，兼容 Demo）
+    uid = _current_user_id()
+    if ar.user_id is not None and uid and int(ar.user_id) != uid:
+        return jsonify({'error': {'code': 'FORBIDDEN', 'message': '无权访问该测评结果'}}), 403
     return jsonify({
         'id': ar.id,
         'primary': ar.primary_type,
@@ -315,7 +324,13 @@ def post_follow_up_answer(id):
 
 
 @bp.route('/user/<int:user_id>/history', methods=['GET'])
+@token_required
 def get_user_history(user_id):
+    # 归属校验：仅本人（或管理员）可查看历史
+    uid = _current_user_id()
+    if uid != user_id and not getattr(g, 'is_admin', False):
+        return jsonify({'error': {'code': 'FORBIDDEN', 'message': '无权查看该用户历史'}}), 403
+
     user = User.query.get(user_id)
     if not user:
         return jsonify({'error': 'User not found', 'code': 'USER_NOT_FOUND'}), 401

@@ -75,6 +75,9 @@ class ObservabilityHub:
         self._tool_mcp_calls = 0
         self._tool_local_calls = 0
         self._tool_mcp_fallbacks = 0
+        # 前端用户行为埋点（P2-4）：event -> 次数
+        self._user_events: Dict[str, int] = {}
+        self._user_events_recent: List[dict] = []
         # Token 用量与成本（防失控的实时计量）
         self._llm_calls = 0
         self._llm_prompt_tokens = 0
@@ -133,6 +136,21 @@ class ObservabilityHub:
             else:
                 self._qa_cache_misses += 1
 
+    def record_user_event(self, event: str, **payload):
+        """记录前端上报的用户行为事件（P2-4 行为埋点聚合）。"""
+        with _lock:
+            self._user_events[event] = self._user_events.get(event, 0) + 1
+            self._user_events_recent.append({'ts': time.time(), 'event': event, **payload})
+            if len(self._user_events_recent) > 100:
+                self._user_events_recent = self._user_events_recent[-100:]
+
+    def user_events(self) -> Dict[str, Any]:
+        with _lock:
+            return {
+                'counts': dict(self._user_events),
+                'recent': list(self._user_events_recent[-20:]),
+            }
+
     def fallback_stack(self) -> List[dict]:
         s = self._state
         active_map = {
@@ -185,6 +203,8 @@ class ObservabilityHub:
                     'qa_cache_hits': self._qa_cache_hits,
                     'qa_cache_misses': self._qa_cache_misses,
                     'qa_cache_hit_rate': round(self._qa_cache_hits / cache_total, 4) if cache_total else 0,
+                    # 前端用户行为埋点（P2-4）
+                    'user_events': dict(self._user_events),
                 },
                 'recent_events': list(self._events[-20:]),
             }

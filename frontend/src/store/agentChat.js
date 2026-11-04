@@ -1,7 +1,29 @@
 import { defineStore } from 'pinia'
 import axios from '@/api'
+import { reportUserEvent } from '@/utils/telemetry'
 
 const STORAGE_KEY = 'tcm_agent_chat_v1'
+
+/** SSE 进度阶段 → 用户可读文案 */
+const STREAM_LABELS = {
+  intent: '已理解你的意图',
+  symptom_done: '已提取你的症状与情况',
+  constitution_start: '体质推理中（RAG 召回 + CoT 推理）...',
+  constitution_done: '体质推理完成',
+  plan_start: '正在生成个性化调理方案...',
+}
+
+/** 从 localStorage 取 JWT（与 api/index.js 拦截器同源逻辑，供 fetch 使用）。 */
+function _authHeader() {
+  try {
+    const stored = localStorage.getItem('tcm_user')
+    if (!stored) return null
+    const user = JSON.parse(stored)
+    return user && user.token ? { Authorization: `Bearer ${user.token}` } : null
+  } catch (e) {
+    return null
+  }
+}
 
 /** 从 localStorage 读取上次持久化的会话（JSON，失败则返回空对象）。 */
 function _loadPersisted() {
@@ -48,8 +70,15 @@ export const useAgentChatStore = defineStore('agentChat', {
       seed_source: cached.seed_source || null,
       /** 是否在发送（或 seed）中，用于 UI spinner 与防重复提交 */
       loading: false,
+      /** 当前请求的 AbortController，用于"停止生成" */
+      abortController: null,
+      /** SSE 流式进度：当前阶段 key 与展示文案（null 表示未在流式传输中） */
+      streamStage: null,
+      streamLabel: null,
       /** 最近一次错误消息；组件可读取后自行清空 */
       error: null,
+      /** F10：最近一次发送的用户输入，供"重发"按钮复用 */
+      lastUserInput: '',
     }
   },
 
@@ -180,6 +209,10 @@ export const useAgentChatStore = defineStore('agentChat', {
         }
 
         _persist(this.$state)
+        reportUserEvent('assessment_seeded', {
+          assessment_id: Number(assessmentId),
+          primary: this.seed_source && this.seed_source.primary,
+        })
         return { sessionId: this.sessionId, seedSource: this.seed_source, seeded: true }
       } catch (err) {
         // 回滚 replaceSession 造成的内存清空
@@ -200,6 +233,7 @@ export const useAgentChatStore = defineStore('agentChat', {
           msg = (typeof errPayload === 'object' ? errPayload.message : errPayload) || err.message || '导入问卷测评失败'
         }
         this.error = { message: msg, code: status || (errPayload && errPayload.code) || 'seed_error' }
+        reportUserEvent('seed_error', { status, code: this.error.code })
         throw Object.assign(err || new Error(msg), { userMessage: msg, status })
       } finally {
         this.loading = false
@@ -207,7 +241,8 @@ export const useAgentChatStore = defineStore('agentChat', {
     },
 
     /**
-     * 发送一条用户消息（等价原 AgentChat.vue 里的 send() 逻辑）。
+     * 发送一条用户消息：优先走 SSE 流式端点（阶段级进度实时可见），
+     * 流式不可用（网络/代理不支持）时自动回退普通 POST。
      * 成功/失败都会把结果 appendMessage 写入本地持久化。
      * @param {string} text
      * @param {{signal?:AbortSignal}} [opts]
@@ -219,22 +254,68 @@ export const useAgentChatStore = defineStore('agentChat', {
 
       this.loading = true
       this.error = null
+      this.streamStage = null
+      this.streamLabel = null
+      this.lastUserInput = content   // F10：供重发按钮复用
       this.appendMessage({ role: 'user', content })
 
+      // 重复提问检测（P2-4 埋点）：与上一条用户消息相同则记录，便于后续迭代发现"澄清效率"问题
+      try {
+        const prevUser = [...this.messages].reverse().find((m) => m.role === 'user')
+        if (prevUser && prevUser.content === content) {
+          reportUserEvent('duplicate_question', { text_len: content.length }, { debounceMs: 800 })
+        }
+      } catch (e) { /* 埋点失败不影响发送 */ }
+
+      // 创建可中断的请求控制器（"停止生成"按钮触发）
+      const ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null
+      this.abortController = ctrl
       try {
         const payload = { user_input: content }
         if (this.sessionId) payload.session_id = this.sessionId
-        const config = opts && opts.signal ? { signal: opts.signal } : undefined
-        const res = await axios.post('/api/agents/chat', payload, config)
-        const data = (res && res.data) || {}
+        let data = null
+        try {
+          data = await this._sendMessageStream(payload, ctrl)
+        } catch (streamErr) {
+          if (ctrl && ctrl.signal && ctrl.signal.aborted) throw streamErr
+          // 流式失败（网关不支持 SSE、超时等）→ 回退普通 POST
+          console.warn('[agentChat] 流式端点不可用，回退普通请求：', streamErr?.message || streamErr)
+          data = await this._sendMessagePlain(payload, ctrl)
+        }
         if (data.session_id) this.setSessionId(data.session_id)
+        // stage='answer' 时直接把后端生成的自然语言回答作为气泡文本（前端按纯文本渲染）
+        const bubbleContent =
+          data.natural_reply ||
+          (data.stage === 'answer' ? (data.answer_text || '')
+          : data.stage === 'plan' ? '已生成调理方案'
+          : data.stage === 'refined_plan' ? '已根据你的情况调整方案'
+          : data.stage === 'seeded' ? '已锚定问卷测评'
+          : data.stage === 'drift_warning' ? '体质可能有变化，建议重测'
+          : data.stage === 'no_assessment' ? '请先做体质量表'
+          : (data.clarification || '请补充信息'))
         this.appendMessage({
           role: 'assistant',
-          content: data.stage === 'plan' ? '已生成调理方案' : data.stage === 'seeded' ? '已锚定问卷测评' : (data.clarification || '请补充信息'),
+          content: bubbleContent,
           response: data,
           error: false,
         })
+        reportUserEvent('message_sent', {
+          stage: data.stage || 'unknown',
+          escalate: Boolean(data.escalate),
+          rejected: Boolean(data.stage === 'clarify'),
+        })
       } catch (err) {
+        // 用户主动点"停止"
+        if (ctrl && ctrl.signal && ctrl.signal.aborted) {
+          this.appendMessage({
+            role: 'assistant',
+            content: '已停止生成。您可以继续提问或让我重新生成方案。',
+            response: null,
+            error: false,
+          })
+          this.error = null
+          return
+        }
         const e = err && err.response && err.response.data ? err.response.data.error : null
         const msg = (typeof e === 'object' && e ? e.message : e) || (err && err.message) || '请求失败'
         const status = err && err.response ? err.response.status : 0
@@ -251,9 +332,89 @@ export const useAgentChatStore = defineStore('agentChat', {
           error: true,
         })
         this.error = { message: userMsg, code: status || (typeof e === 'object' && e && e.code) || 'chat_error' }
+        reportUserEvent('message_error', { status, code: this.error.code })
         throw Object.assign(err || new Error(userMsg), { userMessage: userMsg, status })
       } finally {
+        this.abortController = null
         this.loading = false
+        this.streamStage = null
+        this.streamLabel = null
+      }
+    },
+
+    /** 普通 POST（回退路径）：与原实现等价。 */
+    async _sendMessagePlain(payload, ctrl) {
+      const config = { signal: ctrl ? ctrl.signal : undefined }
+      const res = await axios.post('/api/agents/chat', payload, config)
+      return (res && res.data) || {}
+    },
+
+    /**
+     * SSE 流式路径：POST /api/agents/chat_stream，消费 progress/result/error 事件。
+     * EventSource 原生不支持 POST，这里用 fetch + ReadableStream 手工解析 SSE 帧。
+     * 返回最终 result 事件 data；服务端/网络错误抛出（由调用方决定回退）。
+     */
+    async _sendMessageStream(payload, ctrl) {
+      const headers = { 'Content-Type': 'application/json', ...( _authHeader() || {}) }
+      const res = await fetch('/api/agents/chat_stream', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+        signal: ctrl ? ctrl.signal : undefined,
+      })
+      if (!res.ok || !res.body) {
+        let msg = `流式端点响应异常 (${res.status})`
+        if (res.status === 401) msg = '请先登录后再使用多智能体问诊。'
+        throw new Error(msg)
+      }
+
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder('utf-8')
+      let buffer = ''
+      let finalData = null
+      let streamError = null
+
+      const _handleEvent = (eventName, dataStr) => {
+        let data = null
+        try { data = JSON.parse(dataStr) } catch (e) { return }
+        if (eventName === 'progress') {
+          this.streamStage = data.stage || null
+          this.streamLabel = STREAM_LABELS[data.stage] || null
+        } else if (eventName === 'result') {
+          finalData = data
+        } else if (eventName === 'error') {
+          streamError = new Error((data && data.message) || 'Agent 对话失败')
+        }
+      }
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        // SSE 帧以空行分隔
+        let sep
+        while ((sep = buffer.indexOf('\n\n')) >= 0) {
+          const frame = buffer.slice(0, sep)
+          buffer = buffer.slice(sep + 2)
+          let eventName = 'message'
+          const dataLines = []
+          for (const line of frame.split('\n')) {
+            if (line.startsWith('event:')) eventName = line.slice(6).trim()
+            else if (line.startsWith('data:')) dataLines.push(line.slice(5).trim())
+          }
+          if (dataLines.length) _handleEvent(eventName, dataLines.join('\n'))
+        }
+      }
+
+      if (streamError) throw streamError
+      if (!finalData) throw new Error('流式响应未返回结果')
+      return finalData
+    },
+
+    /** 停止当前正在生成的回复（P0-3：可中断）。 */
+    stop() {
+      if (this.abortController) {
+        try { this.abortController.abort() } catch (e) { /* noop */ }
       }
     },
 
@@ -267,6 +428,51 @@ export const useAgentChatStore = defineStore('agentChat', {
         throw err
       }
       return this.sendMessage(text)
+    },
+
+    /**
+     * 自动基于当前用户【最近一次】测评 seed 会话。
+     * 进 /agent 页时若本地没有 seed_source 就调一次：
+     *   - 成功：自动 seed，用户直接进入问诊
+     *   - 从没测过：返回 {need_assessment:true}，前端显示引导卡片
+     */
+    async seedLatest() {
+      if (this.seed_source && this.seed_source.assessment_id) return { seeded: true }
+      try {
+        const body = {}
+        if (this.sessionId) body.session_id = this.sessionId
+        const res = await axios.post('/api/agents/seed_latest', body)
+        const data = (res && res.data) || {}
+        if (data.seeded && data.seed_source) {
+          if (data.session_id) this.sessionId = data.session_id
+          this.seed_source = { ...data.seed_source, seededAt: Date.now() }
+          const ss = this.seed_source
+          this.appendMessage({
+            role: 'assistant',
+            content: `已自动锚定最近一次测评（#${ss.assessment_id} ${ss.primary_name}）`,
+            response: {
+              stage: 'seeded',
+              seed_source: {
+                assessment_id: ss.assessment_id,
+                primary: ss.primary,
+                primary_name: ss.primary_name,
+                secondary: ss.secondary || [],
+                secondary_names: ss.secondary_names || [],
+                scores: ss.scores || null,
+                reason: ss.reason || null,
+              },
+              session_id: this.sessionId,
+            },
+            error: false,
+          })
+          _persist(this.$state)
+          return { seeded: true }
+        }
+        return { seeded: false, need_assessment: true, message: data.message || '' }
+      } catch (err) {
+        console.warn('[agentChat] seed_latest 失败：', err?.message || err)
+        return { seeded: false, error: true }
+      }
     },
 
     /**
@@ -306,6 +512,17 @@ export const useAgentChatStore = defineStore('agentChat', {
       }
     },
 
+    /** F10：失败重发——用上次用户输入重跑一次（错误气泡上的"重发"按钮调用）。 */
+    async retryLast() {
+      const text = this.lastUserInput
+      if (!text || this.loading) return
+      // 去掉最后一条错误气泡，再重发
+      if (this.messages.length && this.messages[this.messages.length - 1].error) {
+        this.messages.pop()
+      }
+      await this.sendMessage(text)
+    },
+
     /** 重置：清空 store + localStorage，并尝试删除后端会话（失败不影响）。 */
     async reset() {
       const sid = this.sessionId
@@ -327,6 +544,7 @@ export const useAgentChatStore = defineStore('agentChat', {
           console.warn('[agentChat] 后端重置失败（已清空本地）：', e)
         }
       }
+      reportUserEvent('session_reset', { had_session: Boolean(sid) })
     },
   },
 })

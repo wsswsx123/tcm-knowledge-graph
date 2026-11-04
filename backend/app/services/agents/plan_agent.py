@@ -7,6 +7,7 @@ from .base_agent import BaseAgent
 from ..prompts.cot_templates import PLAN_AGENT_PROMPT
 from ..tools.registry import get_registry
 from ..grounding import ground_plan
+from ...config import Config
 
 logger = logging.getLogger(__name__)
 
@@ -14,6 +15,8 @@ logger = logging.getLogger(__name__)
 class PlanAgent(BaseAgent):
     def __init__(self):
         super().__init__(name='plan_agent', role='方案生成')
+        # 方案 JSON 含穴位/食材/运动/注意事项多段，需要更大输出空间，避免截断落回静态模板
+        self.max_tokens = int(getattr(Config, 'PLAN_MAX_TOKENS', 1024))
 
     def run(self, constitution_result: Dict[str, Any],
             trace: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -24,6 +27,19 @@ class PlanAgent(BaseAgent):
         constitution = (constitution_result or {}).get('constitution')
         constitution_name = (constitution_result or {}).get('constitution_name', '')
         syndrome = (constitution_result or {}).get('syndrome', '')
+
+        # ===== 体质混淆双判（P1-2）：主体质与候选体质证据相当，方案给出两者禁忌交集 =====
+        confusion_candidates = (constitution_result or {}).get('confusion_candidates') or []
+        confusion_note = ''
+        if constitution and confusion_candidates:
+            others = [c.get('constitution_name', '') for c in confusion_candidates
+                      if c.get('constitution') != constitution]
+            others = [n for n in others if n]
+            if others:
+                confusion_note = (
+                    f"注意：当前体质证据与「{'、'.join(others)}」存在混淆（相似度接近），"
+                    f"方案需优先覆盖两者禁忌的交集，并避免给出对混淆体质有明显冲突的调理建议。"
+                )
 
         if not constitution:
             return {
@@ -37,14 +53,20 @@ class PlanAgent(BaseAgent):
             }
 
         # ===== LangChain Function Calling：优先让模型调用图谱工具 =====
-        # 新增 get_conditioning_plan（assessment_id→AI增强推荐统一口径），与前端 Result.vue 页完全一致
-        allowed_tools = ['get_constitution_recommendations', 'get_conditioning_plan']
+        # 新增 get_conditioning_plan（assessment_id→AI增强推荐统一口径），与前端 Result.vue 页完全一致；
+        # 放开 get_acupoint_prescription 让模型在需要更详细穴位操作时主动查询（P1-2）。
+        allowed_tools = [
+            'get_constitution_recommendations',
+            'get_conditioning_plan',
+            'get_acupoint_prescription',
+        ]
         prompt_fc = PLAN_AGENT_PROMPT.format(
             constitution_name=constitution_name or constitution,
             syndrome=syndrome or '',
             kg_recs='（推荐优先调用 get_conditioning_plan；未提供 assessment_id 时请调用 get_constitution_recommendations）',
+            confusion_note=confusion_note or '',
         )
-        text, used_tools = self._invoke_with_tools(
+        text, used_tools, tool_results = self._invoke_with_tools(
             prompt_fc, trace, allowed_tools=allowed_tools)
 
         kg_recs = {}
@@ -55,10 +77,17 @@ class PlanAgent(BaseAgent):
                     constitution_name=constitution_name or constitution,
                     syndrome=syndrome or '',
                     kg_recs=kg_recs,
+                    confusion_note=confusion_note or '',
                 )
                 text = self._invoke_llm(prompt, trace)
         else:
-            kg_recs = self._call_kg_tool(constitution, trace)
+            # F5：FC 已调过工具，优先复用其返回值，不再二次 _call_kg_tool
+            for tname in ('get_conditioning_plan', 'get_constitution_recommendations'):
+                if tname in tool_results and isinstance(tool_results[tname], dict):
+                    kg_recs = tool_results[tname]
+                    break
+            if not kg_recs:
+                kg_recs = self._call_kg_tool(constitution, trace)
 
         result = self._parse_json(text)
 

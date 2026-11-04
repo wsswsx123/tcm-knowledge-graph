@@ -11,10 +11,19 @@ logger = logging.getLogger(__name__)
 kg_retriever = None
 
 def init_ai_services(app):
-    """初始化图谱检索服务（AI服务按需动态创建）"""
-    global kg_retriever
-    kg_retriever = KGRetriever(app.neo4j_graph)
-    logger.info("图谱服务初始化成功")
+    """兼容保留入口。
+
+    图谱检索器不再在启动时绑定 app.neo4j_graph（该连接由 warmup 异步建立，
+    启动时为 None，早期绑定会把 None 永久缓存）。改为每次请求按当前连接构建。
+    """
+    logger.info("AI 服务就绪：图谱检索将在请求时按当前连接惰性构建")
+
+
+def _get_kg_retriever():
+    """按当前可用的 Neo4j 连接构建检索器；不可用返回 None（调用方降级 503）。"""
+    from ..services.neo4j_client import get_graph
+    graph = get_graph()
+    return KGRetriever(graph) if graph is not None else None
 
 
 @bp.route('/explain-question', methods=['POST'])
@@ -148,6 +157,7 @@ def enhance_recommendations():
     constitution = data.get('constitution')
     result_id = data.get('result_id')
 
+    kg_retriever = _get_kg_retriever()
     if not kg_retriever:
         return jsonify({"error": "图谱服务不可用"}), 503
 

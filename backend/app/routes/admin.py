@@ -1,12 +1,21 @@
+# backend/app/routes/admin.py
+"""后台知识图谱管理接口：全部需要管理员令牌（JWT + role=admin）。"""
 from flask import Blueprint, jsonify, request, current_app
+from .. import limiter
+from ..utils.security import admin_required
+from ..services.neo4j_client import get_graph, degraded_response
 import json
 
 bp = Blueprint('admin', __name__, url_prefix='/api/admin')
 
+
 # 获取所有节点和关系
 @bp.route('/graph', methods=['GET'])
-def get_graph():
-    graph = current_app.neo4j_graph
+@admin_required
+def get_graph_all():
+    graph = get_graph()
+    if graph is None:
+        return degraded_response()
 
     # 查询所有节点
     nodes_data = graph.run("MATCH (n) RETURN n").data()
@@ -45,13 +54,19 @@ def get_graph():
 
 # 删除节点（同时删除关联关系）
 @bp.route('/node/<node_id>', methods=['DELETE'])
+@limiter.limit('20 per minute')
+@admin_required
 def delete_node(node_id):
-    graph = current_app.neo4j_graph
+    graph = get_graph()
+    if graph is None:
+        return degraded_response()
     graph.run("MATCH (n {id: $id}) DETACH DELETE n", id=node_id)
     return jsonify({'success': True})
 
 # 添加节点
 @bp.route('/node', methods=['POST'])
+@limiter.limit('30 per minute')
+@admin_required
 def add_node():
     data = request.json
     node_id = data.get('id')
@@ -66,7 +81,9 @@ def add_node():
     if label not in allowed_labels:
         return jsonify({'error': '标签类型不允许'}), 400
 
-    graph = current_app.neo4j_graph
+    graph = get_graph()
+    if graph is None:
+        return degraded_response()
     query = f"""
     CREATE (n:`{label}` {{id: $id, name: $name, properties: $properties}})
     RETURN n
@@ -79,6 +96,8 @@ def add_node():
 
 # 更新节点（只更新名称和属性，ID和标签不可变）
 @bp.route('/node/<node_id>', methods=['PUT'])
+@limiter.limit('30 per minute')
+@admin_required
 def update_node(node_id):
     data = request.json
     name = data.get('name')
@@ -87,7 +106,9 @@ def update_node(node_id):
     if not name:
         return jsonify({'error': '名称不能为空'}), 400
 
-    graph = current_app.neo4j_graph
+    graph = get_graph()
+    if graph is None:
+        return degraded_response()
     # 先检查节点是否存在
     check = graph.run("MATCH (n {id: $id}) RETURN n", id=node_id).data()
     if not check:
@@ -107,6 +128,8 @@ def update_node(node_id):
 
 # 添加关系
 @bp.route('/edge', methods=['POST'])
+@limiter.limit('30 per minute')
+@admin_required
 def add_edge():
     data = request.json
     source = data.get('source')
@@ -120,7 +143,9 @@ def add_edge():
     if rel_type not in allowed_rels:
         return jsonify({'error': '关系类型不允许'}), 400
 
-    graph = current_app.neo4j_graph
+    graph = get_graph()
+    if graph is None:
+        return degraded_response()
     query = f"""
     MATCH (a {{id: $source}}), (b {{id: $target}})
     CREATE (a)-[r:`{rel_type}`]->(b)

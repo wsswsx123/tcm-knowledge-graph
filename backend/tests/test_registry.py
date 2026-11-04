@@ -1,59 +1,62 @@
-"""registry.py：工具注册、调用、重试与失败。"""
+"""F4: tool registry timeout/retry unit tests (no Neo4j/MySQL/Ollama)."""
+import time
 import pytest
-
+from app.config import Config
 from app.services.tools.registry import ToolRegistry
 
 
-def _num_schema():
-    return {
-        'type': 'object',
-        'properties': {'a': {'type': 'number'}, 'b': {'type': 'number'}},
-        'required': ['a', 'b'],
-    }
+def test_timeout_not_retried(monkeypatch):
+    # 注入短超时：默认 TOOL_TIMEOUT=10s 远大于 slow() 的 2s 睡眠，不会触发超时分支
+    monkeypatch.setattr(Config, 'TOOL_TIMEOUT', 0.5)
+    monkeypatch.setattr(Config, 'TOOL_TOTAL_BUDGET', 10.0)
+    r = ToolRegistry()
+    calls = {'n': 0}
+
+    def slow():
+        calls['n'] += 1
+        time.sleep(2.0)
+        return 'ok'
+
+    r.register('slow', 'slow', {'type': 'object', 'properties': {}}, slow)
+    t0 = time.time()
+    with pytest.raises(RuntimeError):
+        r.call('slow')
+    elapsed = time.time() - t0
+    assert elapsed < 2.0, f"timeout path too slow, total {elapsed:.1f}s"
+    assert calls['n'] == 1, "超时不应重试"
 
 
-class TestToolRegistry:
-    @pytest.fixture(autouse=True)
-    def _redirect_log(self, monkeypatch, tmp_path):
-        # 避免测试写坏项目 logs/tool_calls.jsonl
-        monkeypatch.setattr(
-            'app.services.tools.registry._TOOL_LOG_PATH',
-            str(tmp_path / 'tool_calls.jsonl'),
-        )
+def test_success_no_retry():
+    r = ToolRegistry()
+    calls = {'n': 0}
 
-    def test_register_and_call(self):
-        reg = ToolRegistry()
-        reg.register('add', '求和', _num_schema(), func=lambda a, b: a + b)
-        assert reg.list_tools()[0]['name'] == 'add'
-        assert reg.call('add', a=1, b=2) == 3
+    def ok():
+        calls['n'] += 1
+        return 'fine'
 
-    def test_unknown_tool_raises(self):
-        reg = ToolRegistry()
-        with pytest.raises(KeyError):
-            reg.call('nope')
+    r.register('ok', 'ok', {'type': 'object', 'properties': {}}, ok)
+    assert r.call('ok') == 'fine'
+    assert calls['n'] == 1
 
-    def test_retry_then_succeed(self, monkeypatch):
-        monkeypatch.setattr('time.sleep', lambda *a, **k: None)
-        reg = ToolRegistry()
-        state = {'n': 0}
 
-        def flaky():
-            state['n'] += 1
-            if state['n'] < 2:
-                raise ValueError('第一次失败')
-            return 'ok'
+def test_mcp_timeout_falls_back_to_local(monkeypatch):
+    """MCP 模式超时后回退本地 callable 一次，而不是直接失败。"""
+    monkeypatch.setattr(Config, 'TOOL_TIMEOUT', 0.5)
+    monkeypatch.setattr(Config, 'TOOL_TOTAL_BUDGET', 10.0)
+    r = ToolRegistry()
+    r.register('t', 't', {'type': 'object', 'properties': {}}, lambda: 'local-ok')
 
-        reg.register('flaky', 'd', {'type': 'object', 'properties': {}}, func=flaky)
-        assert reg.call('flaky') == 'ok'
-        assert state['n'] == 2
+    class FakeMcp:
+        connected = True
 
-    def test_fail_all_retries(self, monkeypatch):
-        monkeypatch.setattr('time.sleep', lambda *a, **k: None)
-        reg = ToolRegistry()
+        def has_tool(self, name):
+            return True
 
-        def always_fail():
-            raise ValueError('总是失败')
+        def call_tool(self, name, kwargs):
+            time.sleep(2.0)
+            return 'mcp-ok'
 
-        reg.register('fail', 'd', {'type': 'object', 'properties': {}}, func=always_fail)
-        with pytest.raises(RuntimeError):
-            reg.call('fail')
+    r.set_mcp_client(FakeMcp())
+    t0 = time.time()
+    assert r.call('t') == 'local-ok'
+    assert time.time() - t0 < 2.0

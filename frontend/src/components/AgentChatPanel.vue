@@ -189,13 +189,57 @@
               compact ? 'text-xs' : 'text-sm',
             ]"
           >
+            <!-- 医生口语化叙述（聊天式主回答，放在所有结构化卡片之前） -->
+            <div
+              v-if="!msg.error && msg.response && msg.response.natural_reply && msg.response.stage !== 'answer'"
+              class="text-[#3d3226] font-serif leading-relaxed whitespace-pre-wrap"
+              :class="compact ? 'text-xs' : 'text-[15px]'"
+            >
+              {{ msg.response.natural_reply }}
+            </div>
+
+            <!-- no_assessment / drift_warning：去做/重做问卷的引导卡片 -->
+            <div
+              v-if="!msg.error && msg.response && (msg.response.stage === 'no_assessment' || msg.response.stage === 'drift_warning')"
+              class="flex items-center justify-between bg-primary/5 border border-primary/30 rounded p-3"
+            >
+              <div class="flex items-center">
+                <ClipboardList class="w-5 h-5 mr-2 text-primary flex-shrink-0" />
+                <div>
+                  <p class="font-serif font-bold text-primary text-sm">
+                    {{ msg.response.stage === 'no_assessment' ? '去做一份体质量表' : '重新测评确认' }}
+                  </p>
+                  <p class="text-xs text-secondary/80 font-serif mt-0.5">
+                    {{ msg.response.stage === 'no_assessment'
+                      ? '约 3 分钟，王琦九种体质量表'
+                      : '体质会随时间变化，以最新测评结果为准' }}
+                  </p>
+                </div>
+              </div>
+              <router-link
+                :to="msg.response.go_assessment_url || '/'"
+                class="flex-shrink-0 ml-3 px-3 py-1.5 bg-primary text-paper rounded-lg text-xs font-serif hover:bg-secondary transition-colors"
+              >
+                {{ msg.response.stage === 'no_assessment' ? '去测评 →' : '重新测评 →' }}
+              </router-link>
+            </div>
+
             <!-- 错误 -->
             <div
               v-if="msg.error"
               class="flex items-start text-red-700 bg-red-50 border border-red-200 rounded p-3"
             >
               <AlertCircle :class="compact ? 'w-3.5 h-3.5' : 'w-4 h-4'" class="mr-2 mt-0.5 flex-shrink-0" />
-              <p>{{ msg.content }}</p>
+              <div class="flex-1">
+                <p>{{ msg.content }}</p>
+                <button
+                  @click="store.retryLast()"
+                  :disabled="store.loading"
+                  class="mt-2 text-xs text-red-700 underline hover:no-underline disabled:opacity-50"
+                >
+                  重发
+                </button>
+              </div>
             </div>
 
             <!-- seeded 阶段：问卷锚定 -->
@@ -229,22 +273,16 @@
               </div>
             </template>
 
-            <!-- clarify 阶段 -->
+            <!-- clarify 阶段：结构化详情（上面已有口语化主回答，这里作为专业视角折叠展示） -->
             <template v-else-if="msg.response && msg.response.stage === 'clarify'">
-              <div class="flex items-center text-secondary font-serif font-bold border-b border-border pb-1.5">
-                <HelpCircle class="w-4 h-4 mr-1.5 text-amber-600" />
-                <span>需要更多信息以明确辨证</span>
-                <span v-if="msg.response.rejected" class="ml-2 text-xs px-2 py-0.5 bg-red-100 text-red-700 rounded-full">
-                  置信度不足，暂缓判定
-                </span>
+              <div class="flex items-center text-secondary/60 font-serif border-b border-border pb-1" :class="compact ? 'text-[11px]' : 'text-xs'">
+                <HelpCircle class="w-3.5 h-3.5 mr-1.5 text-amber-500" />
+                <span>详细辨证参考（系统内部视角）</span>
               </div>
               <div
                 v-if="msg.response.clarification"
-                class="bg-amber-50 border-l-4 border-amber-400 p-3 rounded-r text-amber-900 space-y-1"
+                class="bg-amber-50/60 border-l-4 border-amber-300 p-2.5 rounded-r text-amber-900/90 space-y-1"
               >
-                <p class="font-semibold flex items-center">
-                  <HelpCircle class="w-4 h-4 mr-1.5" />澄清问题
-                </p>
                 <div class="pl-1" v-html="renderMd(msg.response.clarification)"></div>
               </div>
               <div v-if="msg.response.symptom_result" class="text-xs text-[#6b5c51] bg-paper border border-border rounded p-2">
@@ -253,8 +291,8 @@
               </div>
             </template>
 
-            <!-- plan 阶段 -->
-            <template v-else-if="msg.response && msg.response.stage === 'plan'">
+            <!-- plan / refined_plan 阶段：结构化方案卡片 -->
+            <template v-else-if="msg.response && (msg.response.stage === 'plan' || msg.response.stage === 'refined_plan')">
               <!-- 症状分析结果 -->
               <div v-if="msg.response.symptom_result" class="border border-border rounded p-3 bg-paper">
                 <h4
@@ -339,13 +377,22 @@
                       <div
                         v-for="(a, i) in msg.response.plan_result.plan.acupoints"
                         :key="'a' + i"
-                        class="bg-white rounded p-2 border-l-2 border-[#b8860b] shadow-sm"
+                        :class="[
+                          'bg-white rounded p-2 border-l-2 shadow-sm',
+                          a.status === 'pause' ? 'border-gray-300 opacity-60' : 'border-[#b8860b]',
+                        ]"
                       >
-                        <p class="font-serif font-bold text-secondary text-sm">{{ a.name }}</p>
+                        <p class="font-serif font-bold text-secondary text-sm flex items-center">
+                          <span v-if="a.status === 'pause'" class="mr-1">⚠️</span>
+                          {{ a.name }}
+                        </p>
                         <p v-if="a.location" class="text-xs text-[#6b5c51]">取穴：{{ a.location }}</p>
                         <p v-if="a.method" class="text-xs text-[#6b5c51]">方法：{{ a.method }}</p>
-                        <p v-if="a.reason" class="text-xs text-amber-700 bg-amber-50 rounded px-1.5 py-1 mt-1">
+                        <p v-if="a.reason && a.status !== 'pause'" class="text-xs text-amber-700 bg-amber-50 rounded px-1.5 py-1 mt-1">
                           ✨ {{ a.reason }}
+                        </p>
+                        <p v-if="a.pause_reason" class="text-xs text-gray-600 bg-gray-50 rounded px-1.5 py-1 mt-1">
+                          ⚠️ {{ a.pause_reason }}
                         </p>
                       </div>
                       <p v-if="!msg.response.plan_result.plan.acupoints?.length" class="text-xs text-[#c0b298] italic">
@@ -362,13 +409,22 @@
                       <div
                         v-for="(f, i) in msg.response.plan_result.plan.foods"
                         :key="'f' + i"
-                        class="bg-white rounded p-2 border-l-2 border-[#556b2f] shadow-sm"
+                        :class="[
+                          'bg-white rounded p-2 border-l-2 shadow-sm',
+                          f.status === 'pause' ? 'border-gray-300 opacity-60' : 'border-[#556b2f]',
+                        ]"
                       >
-                        <p class="font-serif font-bold text-secondary text-sm">{{ f.name }}</p>
+                        <p class="font-serif font-bold text-secondary text-sm flex items-center">
+                          <span v-if="f.status === 'pause'" class="mr-1">⚠️</span>
+                          {{ f.name }}
+                        </p>
                         <p v-if="f.nature" class="text-xs text-[#6b5c51]">性味：{{ f.nature }}</p>
                         <p v-if="f.effect" class="text-xs text-[#6b5c51]">功效：{{ f.effect }}</p>
-                        <p v-if="f.reason" class="text-xs text-amber-700 bg-amber-50 rounded px-1.5 py-1 mt-1">
+                        <p v-if="f.reason && f.status !== 'pause'" class="text-xs text-amber-700 bg-amber-50 rounded px-1.5 py-1 mt-1">
                           ✨ {{ f.reason }}
+                        </p>
+                        <p v-if="f.pause_reason" class="text-xs text-gray-600 bg-gray-50 rounded px-1.5 py-1 mt-1">
+                          ⚠️ {{ f.pause_reason }}
                         </p>
                       </div>
                       <p v-if="!msg.response.plan_result.plan.foods?.length" class="text-xs text-[#c0b298] italic">
@@ -385,13 +441,30 @@
                       <div
                         v-for="(e, i) in msg.response.plan_result.plan.exercises"
                         :key="'e' + i"
-                        class="bg-white rounded p-2 border-l-2 border-[#4682b4] shadow-sm"
+                        :class="[
+                          'bg-white rounded p-2 border-l-2 shadow-sm',
+                          e.status === 'replace'
+                            ? 'border-orange-400'
+                            : e.status === 'pause'
+                              ? 'border-gray-300 opacity-60'
+                              : 'border-[#4682b4]',
+                        ]"
                       >
-                        <p class="font-serif font-bold text-secondary text-sm">{{ e.name }}</p>
+                        <p class="font-serif font-bold text-secondary text-sm flex items-center">
+                          <span v-if="e.status === 'replace'" class="mr-1">🔄</span>
+                          <span v-else-if="e.status === 'pause'" class="mr-1">⚠️</span>
+                          {{ e.name }}
+                        </p>
                         <p v-if="e.effect" class="text-xs text-[#6b5c51]">功效：{{ e.effect }}</p>
                         <p v-if="e.method" class="text-xs text-[#6b5c51]">方法：{{ e.method }}</p>
-                        <p v-if="e.reason" class="text-xs text-amber-700 bg-amber-50 rounded px-1.5 py-1 mt-1">
+                        <p v-if="e.reason && !e.pause_reason" class="text-xs text-amber-700 bg-amber-50 rounded px-1.5 py-1 mt-1">
                           ✨ {{ e.reason }}
+                        </p>
+                        <p v-if="e.pause_reason" class="text-xs text-orange-700 bg-orange-50 rounded px-1.5 py-1 mt-1">
+                          ⚠️ {{ e.pause_reason }}
+                        </p>
+                        <p v-if="e.replacement" class="text-xs text-green-700 bg-green-50 rounded px-1.5 py-1 mt-1">
+                          🔄 {{ e.replacement }}
                         </p>
                       </div>
                       <p v-if="!msg.response.plan_result.plan.exercises?.length" class="text-xs text-[#c0b298] italic">
@@ -420,8 +493,8 @@
               </div>
             </template>
 
-            <!-- 普通/兜底 -->
-            <p v-else class="text-[#6b5c51] font-serif">{{ msg.content }}</p>
+            <!-- 普通/兜底：仅当没有结构化 response 且没有 natural_reply 时才渲染 msg.content -->
+            <p v-else-if="!(msg.response && msg.response.natural_reply)" class="text-[#6b5c51] font-serif">{{ msg.content }}</p>
 
             <!-- Agent 调用链路（可折叠） -->
             <div
@@ -478,7 +551,7 @@
           :class="compact ? 'text-xs' : 'text-sm'"
         >
           <Loader2 class="w-4 h-4 mr-2 animate-spin" />
-          三级 Agent 协同推理中...
+          {{ store.streamLabel || '正在思考您的问题，您可以随时点击"停止"中断...' }}
         </div>
       </div>
     </div>
@@ -500,8 +573,9 @@
         :style="{ minHeight: compact ? '56px' : '40px' }"
       ></textarea>
       <button
+        v-if="!store.loading"
         @click="send"
-        :disabled="store.loading || !userInput.trim()"
+        :disabled="!userInput.trim()"
         :class="[
           'flex items-center bg-primary text-paper rounded-lg hover:bg-secondary transition-colors disabled:opacity-40 disabled:cursor-not-allowed font-serif flex-shrink-0',
           compact ? 'px-3 py-1.5 text-xs' : 'px-4 py-2 text-sm',
@@ -509,6 +583,17 @@
       >
         <Send :class="compact ? 'w-3.5 h-3.5 mr-1' : 'w-4 h-4 mr-1'" />
         发送
+      </button>
+      <button
+        v-else
+        @click="stopGenerating"
+        :class="[
+          'flex items-center bg-red-600 text-paper rounded-lg hover:bg-red-700 transition-colors font-serif flex-shrink-0',
+          compact ? 'px-3 py-1.5 text-xs' : 'px-4 py-2 text-sm',
+        ]"
+      >
+        <Square :class="compact ? 'w-3.5 h-3.5 mr-1' : 'w-4 h-4 mr-1'" />
+        停止
       </button>
       <button
         @click="reset"
@@ -557,6 +642,7 @@ import {
   XCircle,
   Info,
   BookOpenCheck,
+  Square,
 } from 'lucide-vue-next'
 
 marked.setOptions({ breaks: true, gfm: true })
@@ -754,6 +840,10 @@ const send = async () => {
   }
 }
 
+const stopGenerating = () => {
+  store.stop()
+}
+
 const reset = async () => {
   if (store.loading) return
   try {
@@ -809,6 +899,12 @@ onMounted(async () => {
       }
     }
     if (result.restored) await scrollToBottom()
+  }
+
+  // 还没 seed（比如后端重启丢了会话、或用户新进来）→ 自动取最近一次测评 seed
+  if (!store.seed_source) {
+    await store.seedLatest()
+    await scrollToBottom()
   }
 })
 </script>
