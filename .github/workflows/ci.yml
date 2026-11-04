@@ -39,6 +39,12 @@ jobs:
       - name: 启动耗时门禁（create_app 不加载重资源）
         run: python scripts/check_startup_budget.py
 
+      - name: 置信度门控有效性门禁
+        run: |
+          # 防止阈值被调回失效区间（低于全部样本置信度），导致"门控装了但没通电"。
+          # 详见 scripts/check_gate_effective.py 顶部注释里记录的真实事故。
+          python scripts/check_gate_effective.py --report docs/evaluation/latest_report.json
+
   frontend-build:
     name: 前端构建 (Node 20)
     runs-on: ubuntu-latest

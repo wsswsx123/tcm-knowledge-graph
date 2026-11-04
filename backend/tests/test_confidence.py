@@ -17,8 +17,15 @@ class TestIsConfident:
         assert is_confident(0.9, 0.6) is True
 
     def test_default_threshold(self):
-        assert is_confident(0.7) is True
-        assert is_confident(0.3) is False
+        """兜底阈值必须与 Config 一致，且等于阈值时算达标。
+
+        不写死具体数值：阈值是经 scripts/threshold_sweep.py 扫描后调优的
+        工作点，会随评测数据更新；这里断言"行为"而非"魔法数字"。
+        """
+        from app.config import Config
+        thr = Config.CONFIDENCE_THRESHOLD
+        assert is_confident(thr) is True
+        assert is_confident(thr - 0.01) is False
 
 
 class TestRejectAndClarify:

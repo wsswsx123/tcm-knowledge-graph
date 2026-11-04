@@ -98,7 +98,7 @@ RAG召回案例：
 - 舌淡红苔薄白、脉平，支持平和质。
 - RAG 仅重叠1项，证据不足，不应强判气虚——这是"症状重叠≠诊断成立"的典型负例。
 输出：
-{{"constitution": "pinghe", "constitution_name": "平和质", "secondary": [], "syndrome": "气血充盛证", "confidence": 0.78, "reasoning": "无典型不适群且舌脉平和，按硬规则判平和质，不因单条乏力强判气虚", "clarification": null}}
+{{"constitution": "pinghe", "constitution_name": "平和质", "secondary": [], "syndrome": "气血充盛证", "confidence": 0.85, "reasoning": "无典型不适群且舌脉平和，按硬规则判平和质，不因单条乏力强判气虚", "clarification": null}}
 
 输入症状：{symptoms}
 舌象：{tongue}

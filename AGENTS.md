@@ -148,7 +148,7 @@ docker compose up -d --build
 
 ## 验证建议
 
-本项目已有 `backend/evaluation.py` 评测脚本（50 例样本，幻觉率/拒答率/延迟）；pytest 单元测试规划于后续阶段落地。完成改动后至少做以下验证：
+项目已有 **61 个 pytest 测试**（services 层单测 + 路由层集成测试，全量约 10–25s 离线跑完）和 `backend/evaluation.py` 评测脚本（50 例样本，幻觉率/拒答率/延迟）。完成改动后至少做以下验证：
 
 - 后端语法检查：
 
@@ -157,11 +157,39 @@ cd backend
 python -m compileall app
 ```
 
-- 多 Agent 评测：
+- 全量测试（CI 门禁同款）：
+
+```bash
+cd backend
+pytest -q
+```
+
+- 多 Agent 评测（自动强制 `temperature=0`，保证可复现）：
 
 ```bash
 cd backend
 python evaluation.py
+python evaluation.py --regression   # 只跑历史失败样本，出现错答则退出码=1
+```
+
+- **改动置信度门控或阈值后**，跑阈值扫描确认门控仍会触发（否则会出现"阈值低于全部置信度、门控形同虚设"）：
+
+```bash
+cd backend
+python ../scripts/threshold_sweep.py
+```
+
+- **改动推理链路（增加 LLM 调用 / 改 prompt）后**，跑延迟归因确认瓶颈位置：
+
+```bash
+cd backend
+python ../scripts/profile_latency.py --n 4
+```
+
+- 启动预算门禁（防止重资源被塞回 `create_app`）：
+
+```bash
+python scripts/check_startup_budget.py
 ```
 
 - 前端构建检查：

@@ -121,6 +121,15 @@ def evaluate(samples_filter=None, regression_only=False):
     print("中医多 Agent 体质辨识 · 50 例临床样本评测")
     print("=" * 70)
 
+    # 评测必须可复现：强制贪心解码（temperature=0）。
+    # 必须在 init_stack() 之前设置——LLM 实例是进程内缓存的单例，
+    # 构建之后再改配置不会生效。
+    # 背景：默认 0.3 时同一输入两次运行置信度可差 0.1+（s047 实测 0.731/0.899），
+    # 会让幻觉率与阈值扫描结论漂移。
+    from app.config import Config
+    Config.LLM_TEMPERATURE = 0.0
+    print(f"[init] 确定性评测模式: temperature={Config.LLM_TEMPERATURE}")
+
     # 清空拒答日志
     try:
         from app.services.confidence import clear_reject_log, read_reject_log
@@ -224,6 +233,15 @@ def evaluate(samples_filter=None, regression_only=False):
 
     report = {
         'sample_count': n,
+        # 运行参数随报告落盘：否则事后无法判断某份数据是哪个配置下跑的
+        'run_config': {
+            'llm_temperature': getattr(Config, 'LLM_TEMPERATURE', None),
+            'confidence_threshold': getattr(Config, 'CONFIDENCE_THRESHOLD', None),
+            'ollama_model': getattr(Config, 'OLLAMA_MODEL', None),
+            'embedding_backend': getattr(Config, 'EMBEDDING_BACKEND', None),
+            'deterministic': getattr(Config, 'LLM_TEMPERATURE', None) == 0.0,
+            'timestamp': time.strftime('%Y-%m-%d %H:%M:%S'),
+        },
         'metrics': {
             'baseline_hallucination_rate': round(baseline_halluc_rate, 4),
             'new_hallucination_rate': round(new_halluc_rate, 4),
@@ -240,13 +258,30 @@ def evaluate(samples_filter=None, regression_only=False):
 
     # ===== 回归集统计：历史幻觉 case 必须全部通过 =====
     reg_results = [r for r in results if r.get('regression')]
-    reg_failed = [r for r in reg_results if r.get('rejected') or not r.get('new_ok')]
+
+    # 把"错答"和"拒答"分开统计，不要混成一个 failed：
+    #   - 错答 = 给出结论且结论错 → 幻觉，硬失败
+    #   - 拒答 = 转反问澄清，没有给结论 → 保守行为，医疗场景可接受
+    # 混在一起会让门控一生效，回归集看起来就"全线失败"，反而掩盖真正的问题
+    # （哪一例是自信地答错）。s033 就是典型：pred 与 gt 一致，只是置信度
+    # 0.664 被门控拦下，属于"过度保守"而非"答错"。
+    reg_wrong = [r for r in reg_results if not r.get('rejected') and not r.get('new_ok')]
+    reg_rejected = [r for r in reg_results if r.get('rejected')]
+    reg_passed = [r for r in reg_results if r.get('new_ok') and not r.get('rejected')]
+
     report['regression'] = {
         'enabled': regression_only,
         'total': len(reg_results),
-        'passed': len(reg_results) - len(reg_failed),
+        'passed': len(reg_passed),
+        'wrong_count': len(reg_wrong),
+        'rejected_count': len(reg_rejected),
+        # 向后兼容：failed 只装"错答"（硬失败），拒答另置 rejected_cases
         'failed': [{'sample_id': r['sample_id'], 'ground_truth': r['ground_truth'],
-                    'new_pred': r['new_pred'], 'rejected': r['rejected']} for r in reg_failed],
+                    'new_pred': r['new_pred'], 'confidence': r['confidence']}
+                   for r in reg_wrong],
+        'rejected_cases': [{'sample_id': r['sample_id'], 'ground_truth': r['ground_truth'],
+                            'new_pred': r['new_pred'], 'confidence': r['confidence']}
+                           for r in reg_rejected],
     }
 
     # 读拒答日志做交叉验证
@@ -260,6 +295,17 @@ def evaluate(samples_filter=None, regression_only=False):
     report_path = os.path.join(BACKEND_DIR, 'logs', 'evaluation_report.json')
     with open(report_path, 'w', encoding='utf-8') as f:
         json.dump(report, f, ensure_ascii=False, indent=2)
+
+    # 再写一份到 docs/evaluation/：logs/ 被 .gitignore 排除，README 若引用 logs/
+    # 里的文件，clone 下来的人是看不到的，"可复现"就成了空话。
+    try:
+        docs_dir = os.path.join(os.path.dirname(BACKEND_DIR), 'docs', 'evaluation')
+        os.makedirs(docs_dir, exist_ok=True)
+        with open(os.path.join(docs_dir, 'latest_report.json'), 'w', encoding='utf-8') as f:
+            json.dump(report, f, ensure_ascii=False, indent=2)
+        print(f"[out] 报告副本: docs/evaluation/latest_report.json")
+    except Exception as e:
+        logger.warning(f"写入 docs 报告副本失败: {e}")
 
     print("\n" + "=" * 70)
     print("评测结果汇总")
@@ -276,15 +322,19 @@ def evaluate(samples_filter=None, regression_only=False):
 
     # 回归集结果打印
     if reg_results:
-        print(f"\n回归集(历史幻觉case) : {len(reg_results)} 例，通过 {len(reg_results)-len(reg_failed)} 例")
-        for r in reg_failed:
-            print(f"  ✗ {r['sample_id']} gt={r['ground_truth']} "
-                  f"pred={r['new_pred']} rejected={r['rejected']}")
+        print(f"\n回归集(历史幻觉case) : {len(reg_results)} 例 | 通过 {len(reg_passed)} | "
+              f"错答 {len(reg_wrong)} | 拒答 {len(reg_rejected)}")
+        for r in reg_wrong:
+            print(f"  ✗ 错答 {r['sample_id']} gt={r['ground_truth']} "
+                  f"pred={r['new_pred']} conf={r['confidence']}")
+        for r in reg_rejected:
+            print(f"  ~ 拒答 {r['sample_id']} gt={r['ground_truth']} "
+                  f"pred={r['new_pred']} conf={r['confidence']}（模型判对但置信度不足）")
 
     print(f"\n报告已写入: {report_path}")
     print("=" * 70)
-    if regression_only and reg_failed:
-        print("回归模式未通过：历史幻觉 case 仍存在失败样本（退出码=1）")
+    if regression_only and reg_wrong:
+        print("回归模式未通过：历史幻觉 case 出现错答（退出码=1）")
     return report
 
 

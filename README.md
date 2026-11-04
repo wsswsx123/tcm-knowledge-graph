@@ -1,7 +1,29 @@
 # 中医体质辨识智能诊疗系统
 
+<p>
+  <img alt="Python" src="https://img.shields.io/badge/Python-3.10%20%7C%203.12-3776AB?logo=python&logoColor=white">
+  <img alt="Flask" src="https://img.shields.io/badge/Backend-Flask%20%2B%20SQLAlchemy-000000?logo=flask&logoColor=white">
+  <img alt="Vue" src="https://img.shields.io/badge/Frontend-Vue3%20%2B%20Vite-42B883?logo=vuedotjs&logoColor=white">
+  <img alt="Neo4j" src="https://img.shields.io/badge/Graph-Neo4j-008CC1?logo=neo4j&logoColor=white">
+  <img alt="LLM" src="https://img.shields.io/badge/LLM-Qwen2.5--3B%20(Ollama)-FF6F00">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-61%20passed-brightgreen">
+</p>
+
 > 基于 **多 Agent 架构 + 知识图谱 + RAG** 的中医体质辨识与养生推荐系统。
 > 系统通过「症状分析 → 体质推理 → 方案生成」三级协同 Agent 完成智能问诊，结合 Neo4j 知识图谱、向量检索（RAG）与置信度门控幻觉抑制，输出个性化养生方案，并提供五级容错降级保障。
+
+**30 秒速览**——这不是一个"跑通 demo"的项目，每个数字都有可复现的出处：
+
+| 维度 | 结果 | 数据来源 |
+|---|---|---|
+| 幻觉抑制 | 幻觉率 38.0% → **4.3%**（已回答样本口径，n=50） | `docs/evaluation/latest_report.json`（确定性解码，参数随报告落盘） |
+| 门控有效性 | 阈值 0.80，拒答 8%，拦住 s022 低置信错答 | `docs/evaluation/threshold_sweep.json` + CI 门禁脚本 |
+| 启动性能 | `create_app()` **256s → 0.92s**，重资源 7.7s 后台预热 | `scripts/check_startup_budget.py`（CI 门禁） |
+| 并发 | 20 并发 **250 req/s**，P95 **125ms**，错误率 0% | `scripts/load_test.py` |
+| 延迟归因 | 稳态 13.6s 中 **LLM 占 100%**，非 LLM 仅 0.01s | `scripts/profile_latency.py` |
+| 工程化 | **61 个测试 / 13s 全离线**，Docker Compose 一键起 5 个服务 | pytest + GitHub Actions |
+
+> 同时也写清楚边界：门控拦不住"自信地错"（2/50 高置信错答），`temperature=0` 也不是严格确定（Ollama 浮点抖动），统计口径一律双列、不挑好看的那个。
 
 ---
 
@@ -12,13 +34,13 @@
 - **CoT 思维链模板**：三个 Agent 各自独立的 Few-shot Chain-of-Thought 提示词，强制"逐步推理 → 结构化 JSON 输出"。
 - **LLM Function Calling**：Qwen2.5-3B（Ollama / 本地 Transformers）+ LangChain `bind_tools`，让模型自主调用 RAG、知识图谱工具与**问卷得分查询工具** **`get_assessment_scores`**、**专属调理方案工具** **`get_conditioning_plan`**；Ollama 模式下**无需本地加载权重即可调用**（通过 USE\_OLLAMA + OLLAMA\_URL 双模式，自动做结构/空值兜底）。
 - **RAG 案例匹配**：`bge-small-zh-v1.5` 句向量 + FAISS 向量检索，召回相似证型案例辅助辨证；**支持本地权重（项目根目录放置即可，config 默认会自动拼接绝对路径）与 HuggingFace 在线 ID 两种模式**。
-- **置信度 0.6 门控幻觉抑制**：低于阈值触发反问澄清而非直接下结论；方案实体锚定知识图谱，抑制编造穴位/食材（*问卷 seed 模式下置信度锁定为 1.0，不再触发拒答澄清*）。AI 结构化输出异常时会**自动回落到知识图谱基础推荐**，不会把 `{error, raw}` 错误 dict 渲染成"暂无推荐"。
+- **置信度 0.80 门控幻觉抑制**：低于阈值触发反问澄清而非直接下结论。阈值不是在配置文件里拍一个数——`scripts/threshold_sweep.py` 用 50 例标注集的 `(置信度, 预测)` 做离线回放，扫出「拒答率 × 幻觉率」曲线后选点（0.60 时门控 0 触发、等于没装；0.80 下拒答 8%，已回答幻觉率由 6.0% 降到 4.3%）。方案实体锚定知识图谱，抑制编造穴位/食材（*问卷 seed 模式下置信度锁定为 1.0，不再触发拒答澄清*）。AI 结构化输出异常时会**自动回落到知识图谱基础推荐**，不会把 `{error, raw}` 错误 dict 渲染成"暂无推荐"。
 - **MCP 协议**：独立 MCP Server 暴露 **6 个工具**（新增 `get_assessment_scores` / `get_conditioning_plan`），支持 stdio / 本地双模式调用；**Windows 下 UTF-8 编码 + lazy init + 连接后 warmup 预热，保证冷启动稳定不超时**。
 - **多轮对话持久化**：后端 state 三字段（LLM 上下文 `history` + UI 气泡 `chat_messages` + 问卷先验 `locked_constitution/seed_source`），前端 Pinia + localStorage 双持久化，**刷新浏览器/切页/Flask 重启均能恢复聊天记录与问卷锚定横幅**，后端会话过期时本地缓存兜底。
 - **结果页内嵌迷你问诊 + 6 类『问 AI』快捷按钮**：Result.vue 下方嵌入 AgentChatPanel（mini 模式），onMounted 自动 seed；穴位/食疗/运动/疗法/健康科普/注意事项 每张卡片右下角一键发送定制追问（『为什么推荐足三里？』『痰湿质推荐的薏米红豆汤一周喝几次？』等），无需跳转独立页面。
 - **Follow-up 双向回填**：Agent 追问到的饮食禁忌/用药/作息/慢性病史等个性化信息写回 `UserAnswer.is_followup=true`（`UserAnswer.answer_value` 为 Integer 列时自动拼接 `问题 ||FOLLOWUP_ANSWER|| 回答` 到 `question_content` 并 answer\_value=0 做伪 upsert），下次 seed 时可一并读入。
-- **可观测与评测**：运行时观测 + 50 例临床样本自动化评测，幻觉率 38% → 6%（下降 84.2%，本地完整链路 Ollama qwen2.5:3b + bge-small-zh-v1.5 + FAISS 实测，原始输出见 `backend/logs/evaluation_report.json`），并新增检索层离线评测（Recall@K / MRR，`python evaluate_rag.py`）。
-- **启动与性能工程**：应用工厂重资源惰性化 + 后台预热，`create_app()` 从 256s 降到 **0.9s**；访问日志改 `QueueHandler` 异步落盘，20 并发下 `/health` P95 从 616ms 降到 **88ms**；20 并发混合读接口 **250 req/s / P95 125ms / 错误率 0%**（数据与复现命令见下文「启动性能与并发压测」）。启动预算有 CI 门禁，测试 59 个、全量 20s 左右跑完。
+- **可观测与评测**：运行时观测 + 50 例临床样本自动化评测（**确定性解码**，`temperature=0`，运行参数随报告落盘）。幻觉率 38.0% → 4.3%（已回答样本口径，相对下降 88.6%），拒答率 8.0%；报告原始输出见 `docs/evaluation/latest_report.json`（已纳入版本控制，clone 即可核对），阈值扫描结果见 `docs/evaluation/threshold_sweep.json`。另含检索层离线评测（Recall@K / MRR，`python evaluate_rag.py`）。
+- **启动与性能工程**：应用工厂重资源惰性化 + 后台预热，`create_app()` 从 256s 降到 **0.9s**；访问日志改 `QueueHandler` 异步落盘，20 并发下 `/health` P95 从 616ms 降到 **88ms**；20 并发混合读接口 **250 req/s / P95 125ms / 错误率 0%**（数据与复现命令见下文「启动性能与并发压测」）。启动预算有 CI 门禁，测试 61 个、本机全量 13s 左右跑完（CI 双版本矩阵约 20s）。
 
 ---
 
@@ -61,7 +83,7 @@
 | ---- | --------------------- | ----------------------------------------- | --------------------------------------------------- |
 | 一级 | `SymptomAgent`      | 从主诉提取结构化症状、归一化舌象/脉象     | `{symptoms, tongue, pulse, completeness}`         |
 | 二级 | `ConstitutionAgent` | RAG 召回 + CoT 推理体质/证型 + 置信度校准 | `{constitution, syndrome, confidence, reasoning}` |
-| 仲裁 | `MasterAgent`       | 置信度`< 0.6` 拒答并反问澄清；否则放行  | 澄清问题 / 放行                                     |
+| 仲裁 | `MasterAgent`       | 置信度`< 0.80` 拒答并反问澄清；否则放行 | 澄清问题 / 放行                                     |
 | 三级 | `PlanAgent`         | 调用图谱工具生成穴位/食材/运动方案        | `{acupoints, foods, exercises, precautions}`      |
 
 ```mermaid
@@ -137,7 +159,7 @@ graph TD
 
 ## 🛡️ 幻觉抑制机制
 
-1. **置信度门控拒答**：体质置信度 `< 0.6` 时拒绝下结论，返回 1\~2 个澄清问题。
+1. **置信度门控拒答**：体质置信度 `< 0.80` 时拒绝下结论，返回 1\~2 个澄清问题（阈值取值依据见「评测结果 → 50 例扫描」，`.env` 与代码默认值已对齐，CI 有门禁防止被调回失效区间）。
 2. **方案实体锚定（Grounding）**：`PlanAgent` 生成的穴位/食材/运动必须来自知识图谱返回集合，图谱不存在的实体一律剔除并记入观测。
 
 ---
@@ -186,22 +208,63 @@ MCP 协议在 stdio 上传输 JSON-RPC，对编码、启动耗时、进程环境
 
 `backend/evaluation.py` 基于 **50 例已标注临床样本**（含 9 种体质、约 25% 为症状模糊的不典型样本）自动运行 `SymptomAgent → ConstitutionAgent(RAG) → 置信度门控 → 体质类型预测` 流水线，与 ground-truth（`gt=`）对比；同时保留"基线（无 RAG / 无拒答）"做对照。
 
-### 评测数据汇总（2026-11-03 · Ollama qwen2.5:3b + bge-small-zh-v1.5 + FAISS 本机实测）
+### 评测数据汇总（2026-11-04 · 确定性解码 · Ollama qwen2.5:3b + bge-small-zh-v1.5 + FAISS）
 
-| 指标                     | 基线（无 RAG/无拒答） | 新机制（多 Agent + RAG CoT）                            |
-| ------------------------ | --------------------- | ------------------------------------------------------- |
-| 样本总数                 | 50                    | 50                                                      |
-| 医学幻觉率               | **38.0%**（19/50）    | **6.0%**（3/50）                                        |
-| 幻觉率下降               | —                     | **84.2%**（38% → 6%）                                   |
-| 拒答率（置信度阈值 0.6） | —                     | **0.0%**（50 例全部给出回答，阈值触发 0 次）            |
-| 基线准确率               | **62.0%**（31/50）    | —                                                       |
-| 新机制准确率             | —                     | **94.0%**（47/50）                                      |
-| 历史回归样本（3 例）     | —                     | **3/3 通过**（s006 / s029 / s033）                      |
-| 平均单轮延迟             | —                     | **22.22s**（目标 < 3.0s，当前受本机推理速度限制）        |
-| 延迟达标率               | —                     | 0.0%（见下方“延迟优化说明”）                            |
+> 运行参数随报告落盘（`run_config`）：`temperature=0.0`、`confidence_threshold=0.8`、`deterministic=True`。
 
-> 以上数字直接取自 `backend/logs/evaluation_report.json`（`python evaluation.py` 原始输出），逐条明细见下，可复现。
-> 延迟与本机硬件强相关：换 GPU、换更小模型或启用缓存都会带来数量级差异，故单列说明，不用它衡量架构好坏。
+| 指标                         | 基线（无 RAG / 无拒答） | 新机制（多 Agent + RAG + 门控） |
+| ---------------------------- | ----------------------- | ------------------------------- |
+| 样本总数                     | 50                      | 50                              |
+| 拒答率（阈值 0.80）        | — （无此机制）          | **8.0%**（4/50）                     |
+| 医学幻觉率（已回答样本口径） | **38.0%**（19/50）      | **4.3%**（2/46）                   |
+| 幻觉率相对下降               | —                       | **88.6%**（已回答口径）/ 89.5%（全样本口径，报告 `metrics` 主指标） |
+| 全样本口径幻觉率             | 38.0%                   | 4.0%（2/50）                   |
+| 基线准确率                   | **62.0%**（31/50）      | —                               |
+| 新机制准确率（已回答样本）   | —                       | **95.7%**（44/46）                   |
+| 平均单轮延迟                 | —                       | **16.65s**                      |
+| 延迟达标率（< 3s）           | —                       | 0.0%                       |
+
+**为什么用「已回答样本」口径**：拒答是"不给结论"，不是"给了错结论"，把它算进幻觉率分母会同时低估幻觉率、美化准确率。两个口径都列出来，避免只挑好看的那个。
+
+**两个基线不要混淆**：上表 38.0% 是「初版流水线（无 RAG、无 CoT、无门控）」的历史基线，衡量的是整套架构的价值；而下方阈值扫描表里 0.600 行的 6.0%（3/50）是「当前架构、只把门控关掉」，衡量的是门控本身的边际贡献。两者对照对象不同，不能互相替代——混着写就会得出"改了阈值幻觉率从 38% 降到 6%"这种错误结论。
+
+### 置信度阈值不是拍脑袋定的：50 例扫描
+
+`python scripts/threshold_sweep.py` 用同一份报告里的 `(confidence, new_pred)` 做离线回放——门控是逐样本独立判定，所以不必重跑 LLM 就能重算任意阈值的组合：
+
+| 阈值 | 拒答数（率） | 已回答幻觉率 | 拒答精准率 | 判断 |
+|---|---|---|---|---|
+| 0.600 | 0（0%） | 6.0% | — | 无门控（等价不启用） |
+| 0.775 | 2（4%） | 4.2% | 50% | **效率拐点**：拦住 s022 这一例低置信错答 |
+| 0.800 | 4（8%） | 4.3% | 25% | **当前采用**：比拐点留一点余量，代价是多拒 2 例 |
+| 0.850 | 7（14%） | 2.3% | 29% | 保守档：拦住 s006 的"自信错答"，但拒答率翻倍 |
+| 0.890 | 22（44%） | 0.0% | 14% | 过度拒答：近乎半数样本都不给结论 |
+
+读这张表能得出三个结论：
+
+1. **0.60 的门控等于没有门控**。50 例最低置信度是 0.664，阈值低于它时触发 0 次——这正是最初的问题：机制写了，但从没通电。
+2. **0.775 是效率拐点**：拒答 4% 拦住 s022 这一例低置信错答，幻觉率 6.0% → 4.2%。再往上加，每多拒一例的边际收益迅速衰减。
+3. **0.775 到 0.80 之间的差异是噪声**。n=50 时单例就是 2 个百分点，s038 的置信度（0.777）与阈值差不到 0.003，换个进程重跑就可能翻转。所以**没有把阈值拟合到 0.775**，而是取 0.80 留一点余量；这个选择在统计上无法证明更优，只是风险偏好更保守，如实标注。
+
+> 若业务更看重"零错答"，0.85 能把幻觉率压到 2.3%，代价是拒答率 14%（约每 7 人里 1 人需要补充信息）。医疗场景下这个代价通常可接受，但它会让"每次都能给出结论"的体验变差，属于产品取舍而非技术优劣。
+
+### 门控挡不住的东西：高置信错答
+
+门控生效后仍有 2 例错答，且**都发生在高置信区间**：
+
+- `s006`：conf **0.846**，gt=pinghe 判成 qixu（历史回归 case，本轮仍未通过）
+- `s028`：conf **0.887**，gt=tanshi 判成 pinghe
+
+这说明置信度门控的能力边界：**它拦得住"不确定地错"，拦不住"自信地错"**。后者要靠另一层防线——方案生成阶段的实体锚定与 RAG 证据仲裁。把这两层混为一谈、宣称"门控消灭了幻觉"，是不准确的。
+
+### 一个必须说明的局限：temperature=0 不等于完全确定
+
+同一份代码、两次 `temperature=0` 运行，s028 一次判对一次判错，s001 的置信度出现过 0.904 / 0.936 两个值。Ollama 的贪心解码在浮点累加顺序、批调度上仍有抖动，因此：
+
+- **分布级结论可复现**（幻觉率 ±2 个百分点、置信度分布形态稳定）；
+- **样本级结论不可复现**（某一例的对错会在边界抖动）。
+
+这也是本评测没有把单例结果当作"回归必须通过"硬门禁的原因——回归集改成区分「错答」与「拒答」两类，只有错答才让 CI 失败。
 
 ### 50 例逐条运行日志
 
@@ -209,104 +272,107 @@ MCP 协议在 stdio 上传输 JSON-RPC，对编码、启动耗时、进程环境
 ======================================================================
 中医多 Agent 体质辨识 · 50 例临床样本评测
 ======================================================================
+[init] 确定性评测模式: temperature=0.0
 [init] RAG 检索器就绪, backend=sentence-transformer
 [init] 工具注册表就绪(本地模式)
 
 加载临床样本: 50 例
 
-  s001 gt=pinghe  base=✓ new=pinghe   conf=0.901 lat=21.96s  -> ✓对
-  s002 gt=pinghe  base=✓ new=pinghe   conf=0.900 lat=16.16s  -> ✓对
-  s003 gt=pinghe  base=✓ new=pinghe   conf=0.882 lat=16.41s  -> ✓对
-  s004 gt=pinghe  base=✓ new=pinghe   conf=0.938 lat=17.58s  -> ✓对
-  s005 gt=pinghe  base=✓ new=pinghe   conf=0.889 lat=31.85s  -> ✓对
-  s006 gt=pinghe  base=✗ new=pinghe   conf=0.780 lat=20.72s  -> ✓对
-  s007 gt=qixu    base=✓ new=qixu     conf=0.877 lat=18.18s  -> ✓对
-  s008 gt=qixu    base=✓ new=qixu     conf=0.907 lat=37.89s  -> ✓对
-  s009 gt=qixu    base=✓ new=qixu     conf=0.911 lat=22.02s  -> ✓对
-  s010 gt=qixu    base=✓ new=qixu     conf=0.912 lat=29.46s  -> ✓对
-  s011 gt=qixu    base=✓ new=qixu     conf=0.794 lat=13.48s  -> ✓对
-  s012 gt=qixu    base=✓ new=qixu     conf=0.858 lat=23.61s  -> ✓对
-  s013 gt=yangxu  base=✓ new=yangxu   conf=0.889 lat=13.27s  -> ✓对
-  s014 gt=yangxu  base=✓ new=yangxu   conf=0.926 lat=27.19s  -> ✓对
-  s015 gt=yangxu  base=✗ new=yangxu   conf=0.921 lat=23.13s  -> ✓对
-  s016 gt=yangxu  base=✓ new=yangxu   conf=0.889 lat=31.14s  -> ✓对
-  s017 gt=yangxu  base=✗ new=yangxu   conf=0.901 lat=40.12s  -> ✓对
-  s018 gt=yinxu   base=✓ new=yinxu    conf=0.929 lat=25.25s  -> ✓对
-  s019 gt=yinxu   base=✓ new=yinxu    conf=0.889 lat=19.71s  -> ✓对
-  s020 gt=yinxu   base=✗ new=yinxu    conf=0.753 lat=17.05s  -> ✓对
-  s021 gt=yinxu   base=✓ new=qixu     conf=0.765 lat=17.01s  -> ✗错判
-  s022 gt=yinxu   base=✗ new=yinxu    conf=0.873 lat=25.87s  -> ✓对
-  s023 gt=tanshi  base=✓ new=tanshi   conf=0.857 lat=18.98s  -> ✓对
-  s024 gt=tanshi  base=✓ new=tanshi   conf=0.842 lat=19.57s  -> ✓对
-  s025 gt=tanshi  base=✓ new=tanshi   conf=0.891 lat=19.17s  -> ✓对
-  s026 gt=tanshi  base=✗ new=tanshi   conf=0.878 lat=18.10s  -> ✓对
-  s027 gt=tanshi  base=✓ new=tanshi   conf=0.885 lat=19.66s  -> ✓对
-  s028 gt=tanshi  base=✓ new=tanshi   conf=0.878 lat=18.84s  -> ✓对
-  s029 gt=shire   base=✓ new=shire    conf=0.860 lat=22.68s  -> ✓对
-  s030 gt=shire   base=✓ new=shire    conf=0.799 lat=17.44s  -> ✓对
-  s031 gt=shire   base=✓ new=shire    conf=0.909 lat=30.62s  -> ✓对
-  s032 gt=shire   base=✓ new=shire    conf=0.853 lat=29.71s  -> ✓对
-  s033 gt=shire   base=✗ new=shire    conf=0.758 lat=28.12s  -> ✓对
-  s034 gt=xueyu   base=✓ new=xueyu    conf=0.910 lat=30.40s  -> ✓对
-  s035 gt=xueyu   base=✓ new=xueyu    conf=0.888 lat=25.41s  -> ✓对
-  s036 gt=xueyu   base=✗ new=xueyu    conf=0.771 lat=21.41s  -> ✓对
-  s037 gt=xueyu   base=✗ new=xueyu    conf=0.895 lat=16.94s  -> ✓对
-  s038 gt=xueyu   base=✗ new=xueyu    conf=0.789 lat=31.63s  -> ✓对
-  s039 gt=qiyu    base=✗ new=qiyu     conf=0.868 lat=15.94s  -> ✓对
-  s040 gt=qiyu    base=✗ new=qiyu     conf=0.876 lat=15.71s  -> ✓对
-  s041 gt=qiyu    base=✗ new=qiyu     conf=0.811 lat=20.17s  -> ✓对
-  s042 gt=qiyu    base=✗ new=qiyu     conf=0.845 lat=17.50s  -> ✓对
-  s043 gt=qiyu    base=✗ new=qiyu     conf=0.828 lat=26.45s  -> ✓对
-  s044 gt=qiyu    base=✗ new=qiyu     conf=0.863 lat=15.19s  -> ✓对
-  s045 gt=tebing  base=✓ new=tebing   conf=0.876 lat=20.25s  -> ✓对
-  s046 gt=tebing  base=✗ new=tebing   conf=0.867 lat=29.15s  -> ✓对
-  s047 gt=tebing  base=✓ new=pinghe   conf=0.731 lat=25.47s  -> ✗错判
-  s048 gt=tebing  base=✓ new=tebing   conf=0.844 lat=17.25s  -> ✓对
-  s049 gt=tebing  base=✗ new=tebing   conf=0.873 lat=18.02s  -> ✓对
-  s050 gt=tebing  base=✗ new=qixu     conf=0.820 lat=11.95s  -> ✗错判
+  s001 gt=pinghe  base=✓ new=pinghe   conf=0.904 lat=31.35s  -> ✓对
+  s002 gt=pinghe  base=✓ new=pinghe   conf=0.903 lat=17.37s  -> ✓对
+  s003 gt=pinghe  base=✓ new=pinghe   conf=0.907 lat=12.67s  -> ✓对
+  s004 gt=pinghe  base=✓ new=pinghe   conf=0.906 lat=11.46s  -> ✓对
+  s005 gt=pinghe  base=✓ new=pinghe   conf=0.889 lat=26.94s  -> ✓对
+  s006 gt=pinghe  base=✗ new=qixu     conf=0.846 lat=27.34s  -> ✗幻觉
+  s007 gt=qixu    base=✓ new=qixu     conf=0.890 lat=21.96s  -> ✓对
+  s008 gt=qixu    base=✓ new=qixu     conf=0.907 lat=28.07s  -> ✓对
+  s009 gt=qixu    base=✓ new=qixu     conf=0.909 lat=30.57s  -> ✓对
+  s010 gt=qixu    base=✓ new=qixu     conf=0.886 lat=22.50s  -> ✓对
+  s011 gt=qixu    base=✓ new=qixu     conf=0.891 lat=25.49s  -> ✓对
+  s012 gt=qixu    base=✓ new=qixu     conf=0.807 lat=23.09s  -> ✓对
+  s013 gt=yangxu  base=✓ new=yangxu   conf=0.904 lat=12.98s  -> ✓对
+  s014 gt=yangxu  base=✓ new=yangxu   conf=0.900 lat=13.84s  -> ✓对
+  s015 gt=yangxu  base=✗ new=yangxu   conf=0.904 lat=27.77s  -> ✓对
+  s016 gt=yangxu  base=✓ new=yangxu   conf=0.888 lat=18.26s  -> ✓对
+  s017 gt=yangxu  base=✗ new=yangxu   conf=0.847 lat=14.81s  -> ✓对
+  s018 gt=yinxu   base=✓ new=yinxu    conf=0.905 lat=16.43s  -> ✓对
+  s019 gt=yinxu   base=✓ new=yinxu    conf=0.905 lat=11.57s  -> ✓对
+  s020 gt=yinxu   base=✗ new=yinxu    conf=0.907 lat=13.23s  -> ✓对
+  s021 gt=yinxu   base=✓ new=yinxu    conf=0.875 lat=13.99s  -> ✓对
+  s022 gt=yinxu   base=✗ new=shire    conf=0.774 lat=16.81s  -> 拒答
+  s023 gt=tanshi  base=✓ new=tanshi   conf=0.906 lat=12.41s  -> ✓对
+  s024 gt=tanshi  base=✓ new=tanshi   conf=0.906 lat=14.00s  -> ✓对
+  s025 gt=tanshi  base=✓ new=tanshi   conf=0.896 lat=15.71s  -> ✓对
+  s026 gt=tanshi  base=✗ new=tanshi   conf=0.890 lat=12.71s  -> ✓对
+  s027 gt=tanshi  base=✓ new=tanshi   conf=0.894 lat=13.74s  -> ✓对
+  s028 gt=tanshi  base=✓ new=pinghe   conf=0.887 lat=19.64s  -> ✗幻觉
+  s029 gt=shire   base=✓ new=shire    conf=0.889 lat=18.14s  -> ✓对
+  s030 gt=shire   base=✓ new=shire    conf=0.906 lat=22.01s  -> ✓对
+  s031 gt=shire   base=✓ new=shire    conf=0.909 lat=15.32s  -> ✓对
+  s032 gt=shire   base=✓ new=shire    conf=0.877 lat=12.57s  -> ✓对
+  s033 gt=shire   base=✗ new=shire    conf=0.664 lat=6.03s  -> 拒答
+  s034 gt=xueyu   base=✓ new=xueyu    conf=0.887 lat=7.45s  -> ✓对
+  s035 gt=xueyu   base=✓ new=xueyu    conf=0.900 lat=13.69s  -> ✓对
+  s036 gt=xueyu   base=✗ new=xueyu    conf=0.905 lat=12.79s  -> ✓对
+  s037 gt=xueyu   base=✗ new=xueyu    conf=0.911 lat=16.06s  -> ✓对
+  s038 gt=xueyu   base=✗ new=xueyu    conf=0.777 lat=17.21s  -> 拒答
+  s039 gt=qiyu    base=✗ new=qiyu     conf=0.889 lat=14.19s  -> ✓对
+  s040 gt=qiyu    base=✗ new=qiyu     conf=0.863 lat=9.46s  -> ✓对
+  s041 gt=qiyu    base=✗ new=qiyu     conf=0.878 lat=14.13s  -> ✓对
+  s042 gt=qiyu    base=✗ new=qiyu     conf=0.905 lat=14.68s  -> ✓对
+  s043 gt=qiyu    base=✗ new=qiyu     conf=0.880 lat=15.89s  -> ✓对
+  s044 gt=qiyu    base=✗ new=qiyu     conf=0.863 lat=21.22s  -> ✓对
+  s045 gt=tebing  base=✓ new=tebing   conf=0.895 lat=13.01s  -> ✓对
+  s046 gt=tebing  base=✗ new=tebing   conf=0.881 lat=11.75s  -> ✓对
+  s047 gt=tebing  base=✓ new=tebing   conf=0.892 lat=14.36s  -> ✓对
+  s048 gt=tebing  base=✓ new=tebing   conf=0.938 lat=13.03s  -> ✓对
+  s049 gt=tebing  base=✗ new=tebing   conf=0.869 lat=14.06s  -> ✓对
+  s050 gt=tebing  base=✗ new=tebing   conf=0.783 lat=8.69s  -> 拒答
 
 ======================================================================
 评测结果汇总
 ======================================================================
 样本总数              : 50
 基线幻觉率(无RAG无拒答): 38.0%  (19/50)
-新机制幻觉率(多Agent) : 6.0%  (3/50)
-幻觉率下降            : 84.2%
-拒答率(置信度阈值)    : 0.0%  (0/50)
-平均单轮延迟          : 22.22s (目标 <3.0s)
+新机制幻觉率(多Agent) : 4.0%  (2/50)
+幻觉率下降            : 89.5%
+拒答率(置信度阈值)    : 8.0%  (4/50)
+平均单轮延迟          : 16.65s (目标 <3.0s)
 延迟达标率            : 0.0%
 
 基线准确率            : 62.0%  (31/50)
-新机制准确率          : 94.0%  (47/50)
-历史回归样本          : 3/3 通过
+新机制准确率          : 95.7%  (44/46)
 ======================================================================
 ```
 
-### 3 例历史幻觉案例分析（均已修复：平和质硬规则 / 湿热痰湿负例 / RAG 证据占优仲裁，回归 3/3 通过）
+### 3 例历史幻觉案例复盘（当前：s029 通过 / s033 拒答 / s006 仍错答）
 
 | 样本 | ground-truth | 预测类型 | 典型症状                                                                     | 可能根因（人工复盘）                                                                                                                     | 改进方向                                                                                                                                                                                |
 | ---- | ------------ | -------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | s006 | pinghe       | qixu     | base=✗（基线就错了），典型症状里可能混入"易疲劳 / 动则汗出"等接近气虚的描述 | 平和质阈值 60 分 + 主/兼夹判定阈值边界非常接近（平和质与 8 种偏颇的边界判定是量表难题）；RAG 命中了少量 qixu 案例导致 CoT 过度自信跳类型 | 在 CoT 模板中显式加入"平和质 ≥ 60 分**且** 任何偏颇均 < 40 分，**否则只判为相应偏颇 / 兼夹**"硬规则（目前 constitution.py 是这样，要同步写入 ConstitutionAgent guardrail） |
-| s029 | shire        | pinghe   | base=✓ （基线能判对），症状偏向"苔黄腻 + 口苦 + 大便粘"却被判为平和质       | RAG 中湿热 / 痰湿样本不典型或描述少（shī rè 与 tán shī 混淆）；ConstitutionAgent 的 Few-shot 里"湿热→平和"负例不够                  | 在`syndrome_cases.json` 中补 5–10 条湿热 / 痰湿对比负例（舌苔黄 / 口苦 / 尿黄 vs 舌苔白腻 / 口粘 / 浮肿）；CoT 里新增这组对照问答                                                    |
-| s033 | shire        | qiyu     | base=✗（基线就错了），症状可能同时含"情绪不畅 + 胁胀 + 舌苔腻"              | 湿热 + 情志症状叠加时，RAG 容易先命中"气郁"证型案例（情志类检索分 > 湿热）；置信度 0.863 没过"混淆"双判分支                              | ConstitutionAgent 在"体质混淆（top2 分差 < 0.05）"时改触发**置信度降级并双判**，或直接走 PlanAgent 按两种体质并集给出禁忌交集                                                     |
+| s029 | shire        | shire（已修复） | base=✓ （基线能判对），早期版本症状偏向"苔黄腻 + 口苦 + 大便粘"却被判为平和质 | 历史根因：RAG 中湿热 / 痰湿样本不典型或描述少（湿热与痰湿混淆）；ConstitutionAgent 的 Few-shot 里"湿热→平和"负例不够                  | **已落地**：`syndrome_cases.json` 补 5–10 条湿热 / 痰湿对比负例（舌苔黄 / 口苦 / 尿黄 vs 舌苔白腻 / 口粘 / 浮肿），CoT 里加这组对照问答；本轮 conf=0.889 判对 |
+| s033 | shire        | shire（被拒答） | base=✗（基线就错了），症状同时含"情绪不畅 + 胁胀 + 舌苔腻"              | 湿热 + 情志症状叠加时，RAG 容易先命中"气郁"证型案例（情志类检索分 > 湿热）；本轮置信度 0.664，已被 0.80 门控拦下，未把错误结论抛给用户 | 门控已覆盖：低置信直接反问澄清；进一步可在"体质混淆（top2 分差 < 0.05）"时触发双判，按两种体质并集给禁忌交集 |
 
-### 平均单轮延迟 22.2s 的优化说明
+### 评测延迟 16.65s 说明
 
-评测环境使用 **Ollama + qwen2.5:3b 单卡 CUDA**，每轮推理 \~7s + RAG/工具 \~1.5s 是 22.2s 的主要组成。以下任一步都能把延迟压进 **< 3s 目标**（当前代码架构完全支持，只要切换模型后端即可）：
+这个数字全部来自「体质推理 + 方案生成」两次 LLM 调用。`scripts/profile_latency.py` 从运行时 trace 聚合实测：稳态下 LLM 占 **100%**，非 LLM 部分（RAG 检索 + 规则 + 工具调用）只有 **0.01s**。50 例均值 16.65s 里含首例的向量库冷启动开销，稳态均值是 13.6s（详见下文「延迟归因」）。也就是说延迟几乎完全由本机推理速度决定，**优化 Web 层或换图数据库都不会有体感收益**——这是数据结论，不是推测。
 
-1. **使用 Qwen2.5-0.5B / 1.5B 本地量化权重**（`LLM_MODE=transformers` + `LOCAL_MODEL_PATH`），单轮推理约 0.4–0.8s；
-2. **Ollama 开启 GPU 显存常驻 + 并行 batch**（`OLLAMA_NUM_PARALLEL=4` + `OLLAMA_MAX_LOADED_MODELS=1`），评测用例全部并发跑（现在是串行，50 × 22.2s ≈ 18 分钟；并发后可压到分钟级）；
-3. **生产用 gunicorn + MCP Server 常驻预热**（Docker compose 已配置 `restart: always` + 容器启动时 warmup），冷启动 12–20s 的 lazy init 只跑一次，后续全部稳态 1–3s；
-4. 把不典型/边界样本升级为**问卷 seed 模式**（置信度锁定 1.0 + 跳过 SymptomAgent/ConstitutionAgent 两步），端到端延迟约等于 PlanAgent 单次工具调用 + 1 次 LLM，预计 < 2s。
+压进 3s 的三条路径，收益可估算：
 
-> 本次完整原始输出保存在 `backend/logs/evaluation_report.json`（结构化 JSON）和 `backend/logs/evaluation_YYYYmmdd_HHMMSS.log`（纯文本）。复现只需：
+1. **问卷 seed 模式**（已实现）：锁定体质判定、跳过体质推理，2 次 LLM → 1 次，约 −50%；
+2. **换更小/量化权重或 GPU 常驻**：单次推理 6.8s → 0.5–1s，量级提升；
+3. **高频问答缓存**（已实现）：命中直接返回，< 50ms。
+
+当前环境无独立 GPU，所以延迟达标率是 0%。这是硬件约束而非架构缺陷——同一套代码在 Web 层 20 并发下 P95 只有 125ms，非 LLM 部分 0.01s，瓶颈位置是明确的。
+
+> 完整原始输出：`docs/evaluation/latest_report.json`（结构化，已纳入版本控制）。复现：
 >
 > ```bash
 > cd backend
-> python evaluation.py
+> python evaluation.py              # 全量 50 例
+> python evaluation.py --regression # 只跑历史失败样本，错答则退出码=1
+> python ../scripts/threshold_sweep.py   # 阈值扫描（离线回放，不重跑 LLM）
 > ```
-
----
 
 ## 📈 可观测性
 
@@ -331,7 +397,7 @@ MCP 协议在 stdio 上传输 JSON-RPC，对编码、启动耗时、进程环境
 | `create_app()` 装配耗时 | 256.0s | **0.92s** |
 | 重资源加载 | 阻塞启动 | 后台线程 7.7s 完成（不阻塞接收流量） |
 | `/health/ready` | 无预热语义 | 预热未完成时返回 503 `warmup=running` |
-| 测试套件耗时 | 4m43s | **15–25s** |
+| 测试套件耗时 | 4m43s（且 3 个 error） | **13–25s，61 passed** |
 
 关键改动：
 - 向量库改为首个 `retrieve()` 或预热线程加载，检索器加载加双检锁；
@@ -366,6 +432,31 @@ MCP 协议在 stdio 上传输 JSON-RPC，对编码、启动耗时、进程环境
 - **Web 层可通过多 worker 线性扩展**：会话状态已落 Redis、限流存储已接 Redis，`gunicorn -w N` 即可横向扩；当前 250 req/s 是单进程 + GIL 的上限。
 - **异步日志是性价比最高的一次优化**：改造前 `/health` 在 20 并发下 P95 ≈ 616ms（访问日志同步写盘被 handler 锁串行化），改造后 88ms。
 
+### 延迟归因：13.6s 花在哪两次 LLM 调用上
+
+`python scripts/profile_latency.py --n 4` 从运行时 trace 聚合每次 LLM 调用的 `elapsed`，把端到端耗时拆成「LLM 推理」与「非 LLM（RAG 检索 + 规则 + 工具）」两部分：
+
+| 样本 | 总耗时 | 其中 LLM | LLM 次数 | 非 LLM | 体质推理 | 方案生成 |
+|---|---|---|---|---|---|---|
+| s001（进程首例，含向量库加载） | 31.31s | 18.97s | 2 | 12.33s | 21.14s | 10.16s |
+| s002 | 17.16s | 17.15s | 2 | 0.01s | 12.16s | 5.00s |
+| s003 | 12.07s | 12.07s | 2 | 0.01s | 7.15s | 4.92s |
+| s004 | 11.63s | 11.62s | 2 | 0.01s | 6.10s | 5.53s |
+| **稳态均值** | **13.62s** | **13.61s** | **2** | **0.01s** | — | — |
+
+两个结论：
+
+- **稳态下 LLM 占 100%**，非 LLM 部分只有 0.01s。也就是说 RAG 检索、规则匹配、图谱工具全部加起来可以忽略，延迟完全由「体质推理 + 方案生成」两次调用决定。**优化 Web 层或换图数据库都不会有体感收益**，这是数据给出的结论，不是推测。
+- **冷启动额外 12.3s 来自向量库加载与外部服务超时等待**，与推理无关；这类开销已由后台预热承担（见上文启动性能），预热完成后 `/health/ready` 才会放行流量。
+
+据此，三条降延迟路径的收益是可估算的：
+
+| 路径 | 机制 | 预期收益 | 现状 |
+|---|---|---|---|
+| 减少调用次数 | 问卷 seed 模式锁定体质，跳过体质推理，2 次 → 1 次 | 约 −50% | 已实现（`/api/agents/seed`） |
+| 加速单次推理 | 换 1.5B 量化权重 / GPU 常驻 | 单次 6.8s → 0.5–1s | 配置可切，未在有卡环境实测 |
+| 缓存命中 | 高频问答缓存直接返回 | < 50ms | 已实现（Redis + 内存回退） |
+
 复现命令：
 
 ```bash
@@ -384,7 +475,7 @@ python scripts/load_test.py --base-url http://127.0.0.1:5101 \
 
 ## 🧪 测试与 CI
 
-- **59 个测试**（单测 + 路由集成测试），全量运行 **15–25s**，全程离线（SQLite + TF-IDF + 图谱降级）。
+- **61 个测试**（单测 + 路由集成测试），全量运行 **13–25s**，全程离线（SQLite + TF-IDF + 图谱降级）。
 - 集成测试覆盖本轮安全加固的回归点：注册/登录、`/user/<id>/verify` 用户枚举修复、admin 接口匿名 401 / 普通用户 403 / 管理员放行、测评结果与历史记录越权（403）。
 - `tests/test_app_factory.py` 守住启动边界：`create_app()` 必须快且不加载向量库、不连 Neo4j。
 - CI（`.github/workflows/ci.yml`）：Python 3.10/3.12 矩阵运行 `pytest -q`，再跑 `scripts/check_startup_budget.py` 启动预算门禁；前端单独 job 跑 `npm ci && npm run build`。
@@ -478,7 +569,8 @@ python scripts/load_test.py --base-url http://127.0.0.1:5101 \
 | `MCP_CONNECT_TIMEOUT`                        | `60`                                                   | MCP stdio 握手超时（秒）；含 CUDA 的慢机器可调到`120`                                                                                                                                                                                |
 | `TOOL_TIMEOUT`                               | `60.0`                                                 | MCP 工具调用单次超时（秒）。首包会 lazy import torch/sentence-transformers/py2neo + 加载 bge 模型，合计 12–20s；不建议低于`30`                                                                                                      |
 | `TOOL_MAX_RETRIES`                           | `3`                                                    | MCP 工具调用失败 → 回退本地前的重试次数                                                                                                                                                                                               |
-| `CONFIDENCE_THRESHOLD`                       | `0.6`                                                  | 体质推理置信度阈值，低于则反问澄清（问卷 seed 模式固定 1.0，不受此值影响）                                                                                                                                                             |
+| `CONFIDENCE_THRESHOLD`                       | `0.80`                                                 | 体质推理置信度阈值，低于则反问澄清。0.80 由 50 例阈值扫描得出（0.775 为效率拐点，取 0.80 留余量，见「评测结果」章节）；问卷 seed 模式固定 1.0 不受此值影响。**改代码默认值无效——`.env` 会覆盖它**，改完请看启动日志打印的「实际生效阈值」 |
+| `LLM_TEMPERATURE`                            | `0.3`                                                  | 采样温度。线上 0.3；`evaluation.py` 自动强制 0.0 以保证评测可复现（非零温度下同一输入置信度可差 0.1+）                                                                                                                                  |
 | `REDIS_URL`                                  | 空（=用内存 fallback）                                   | Redis 连接串，如`redis://127.0.0.1:6379/0`；生产务必填，否则会话 TTL/进程重启会丢后端 state                                                                                                                                          |
 | `SESSION_TTL`                                | `86400`                                                | 会话过期时间（秒），默认 24h                                                                                                                                                                                                           |
 | `FLASK_ENV` / `DEBUG`                      | `development` / `true`                               | 生产改为`production` + `false`；`DEBUG=true` 会启用 werkzeug reloader 双进程                                                                                                                                                     |
@@ -573,8 +665,15 @@ stop.bat
 
 ```bash
 cd backend
-python evaluation.py   # 50 例临床样本评测，生成 logs/evaluation_report.json
+python evaluation.py            # 50 例临床样本评测（自动强制 temperature=0）
+python evaluation.py --regression  # 只跑历史失败样本，出现错答则退出码=1
+python ../scripts/threshold_sweep.py    # 置信度阈值扫描（离线回放，不重跑 LLM）
+python ../scripts/profile_latency.py    # 端到端延迟归因（拆 LLM / 非 LLM）
 ```
+
+评测结果写入 `backend/logs/evaluation_report.json`（运行时产物）和 `docs/evaluation/latest_report.json`（纳入版本控制，便于 clone 后直接核对）。
+
+> 关于 `data/rag/faiss_index.npy`：该索引与 embedding 后端绑定——bge 句向量是 512 维，TF-IDF 是词表维度（数千维）。`case_retriever` 加载时若发现维度与当前编码器不一致会自动重建并覆盖，这是预期行为（也是"低维索引污染后能自愈"的机制）。因此仓库中的索引与 `EMBEDDING_BACKEND` 配置强相关，切换后端或更新案例库后首次加载会重写该文件，属正常现象，不必惊慌。
 
 ### 7. Docker 一键部署（推荐生产）
 

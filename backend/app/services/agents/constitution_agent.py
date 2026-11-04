@@ -7,7 +7,7 @@ from .base_agent import BaseAgent
 from ..prompts.cot_templates import CONSTITUTION_AGENT_PROMPT
 from ..tools.registry import get_registry
 from ..rag.case_retriever import get_case_retriever
-from ..confidence import is_confident, reject_and_clarify
+from ..confidence import is_confident, reject_and_clarify, DEFAULT_CONFIDENCE_THRESHOLD
 from ..grounding import calibrate_confidence
 from ...config import Config
 
@@ -37,7 +37,7 @@ class ConstitutionAgent(BaseAgent):
         # 注意：舌/脉通过参数透传给 _fallback，不再写 self 实例属性——
         # ConstitutionAgent 是 MasterAgent 单例的成员，多用户并发请求会互相覆盖导致串味（P1-1）。
 
-        threshold = getattr(Config, 'CONFIDENCE_THRESHOLD', 0.6)
+        threshold = getattr(Config, 'CONFIDENCE_THRESHOLD', DEFAULT_CONFIDENCE_THRESHOLD)
         prompt = CONSTITUTION_AGENT_PROMPT.format(
             symptoms=symptoms,
             tongue=tongue,
@@ -382,7 +382,10 @@ class ConstitutionAgent(BaseAgent):
                     'constitution_name': CONSTITUTION_NAMES.get('pinghe', '平和质'),
                     'secondary': [],
                     'syndrome': '气血充盛证',
-                    'confidence': 0.78,
+                    # 硬规则是确定性判定（无明显不适 + 舌脉平和），不是概率推理，
+                    # 置信度理应高于 LLM 输出；取 0.85 以确保在门控阈值（0.80）之上，
+                    # 否则该规则会被自己的门控拦住，设计意图（阻止单条乏力误判气虚）失效。
+                    'confidence': 0.85,
                     'reasoning': '规则硬规则：主诉无明显不适且舌脉平和，判平和质（不因单条乏力强判气虚）',
                     'clarification': None,
                     'rule_asserted': True,

@@ -53,7 +53,7 @@ def _build_llm(num_predict: int):
         inst = ChatOllama(
             model=getattr(Config, 'OLLAMA_MODEL', 'qwen2.5:3b'),
             base_url=getattr(Config, 'OLLAMA_BASE_URL', 'http://localhost:11434'),
-            temperature=0.3,
+            temperature=getattr(Config, 'LLM_TEMPERATURE', 0.3),
             num_predict=num_predict,
         )
         _llm_instances[num_predict] = inst
@@ -73,7 +73,7 @@ def _build_llm(num_predict: int):
                 'text-generation',
                 model=Cfg.MODEL_PATH_QWEN,
                 max_new_tokens=num_predict,
-                temperature=0.3,
+                temperature=getattr(Config, 'LLM_TEMPERATURE', 0.3),
             )
             inst = HuggingFacePipeline(pipeline=pipe)
             _llm_instances[num_predict] = inst

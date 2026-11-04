@@ -16,6 +16,11 @@ from ..config import Config
 
 logger = logging.getLogger(__name__)
 
+# 阈值兜底默认值（单一来源）。Config.CONFIDENCE_THRESHOLD 是实际生效值，
+# 这里只在 Config 缺失时兜底，避免多处硬编码 0.6/0.8 不一致。
+# 取值依据见 scripts/threshold_sweep.py 的扫描结果（基于确定性解码的报告）。
+DEFAULT_CONFIDENCE_THRESHOLD = 0.80
+
 # 拒答事件日志文件（供评测脚本统计）
 _REJECT_LOG_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))),
@@ -31,7 +36,8 @@ def is_confident(confidence: Optional[float], threshold: float = None) -> bool:
     """判断置信度是否达到阈值。"""
     if confidence is None:
         return False
-    thr = threshold if threshold is not None else getattr(Config, 'CONFIDENCE_THRESHOLD', 0.6)
+    thr = threshold if threshold is not None else getattr(
+        Config, 'CONFIDENCE_THRESHOLD', DEFAULT_CONFIDENCE_THRESHOLD)
     return float(confidence) >= thr
 
 
@@ -44,7 +50,8 @@ def reject_and_clarify(constitution_result: Dict[str, Any],
     澄清问题动态生成（P1-3）：优先用 LLM 给出的问题；否则根据当前已缺什么
     （症状/舌象/脉象）智能组合，不再固定两句。
     """
-    thr = threshold if threshold is not None else getattr(Config, 'CONFIDENCE_THRESHOLD', 0.6)
+    thr = threshold if threshold is not None else getattr(
+        Config, 'CONFIDENCE_THRESHOLD', DEFAULT_CONFIDENCE_THRESHOLD)
     constitution_result = constitution_result or {}
     confidence = constitution_result.get('confidence')
 

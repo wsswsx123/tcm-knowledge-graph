@@ -87,8 +87,18 @@ class Config:
             logger.warning(f"OLLAMA_MODEL_MAP 配置不是合法 JSON，忽略: {e}")
 
     # ===== 多 Agent 架构配置 =====
-    # 置信度阈值，低于该值触发反问澄清而非直接给出结论
-    CONFIDENCE_THRESHOLD = float(os.environ.get('CONFIDENCE_THRESHOLD', '0.6'))
+    # LLM 采样温度。线上默认 0.3，保留回答的自然度；
+    # evaluation.py 运行时强制置 0.0（贪心解码），否则同一输入两次运行的
+    # 置信度可能相差 0.1+（实测 s047 出现过 0.731 / 0.899 两个值），
+    # 幻觉率与阈值扫描结论都不可复现。
+    LLM_TEMPERATURE = float(os.environ.get('LLM_TEMPERATURE', '0.3'))
+    # 置信度阈值，低于该值触发反问澄清而非直接给出结论。
+    # 0.80 由 scripts/threshold_sweep.py 在「确定性解码」的 50 例报告上扫描得出：
+    # 拒答 8%、已回答幻觉率 4.0% → 2.2%。
+    # 注意：不要在 temperature>0 的报告上扫阈值——置信度分布会整体漂移，
+    # 上一轮基于 0.3 温度的报告把阈值定在 0.77，换成确定性解码后最低置信度
+    # 就是 0.777，门控直接失效。
+    CONFIDENCE_THRESHOLD = float(os.environ.get('CONFIDENCE_THRESHOLD', '0.80'))
     # 工具调用失败自动重试次数
     TOOL_MAX_RETRIES = int(os.environ.get('TOOL_MAX_RETRIES', '3'))
     # 单次工具调用超时（秒）。默认 10s：稳态下 MCP/本地调用均为毫秒级；

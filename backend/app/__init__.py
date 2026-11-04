@@ -123,6 +123,17 @@ def create_app(warmup: Optional[bool] = None):
 
     _maybe_warmup(app, warmup)
 
+    # 打印"实际生效"的关键推理参数。
+    # 起因：backend/.env 里残留 CONFIDENCE_THRESHOLD=0.6，覆盖了代码默认值，
+    # 导致置信度门控在 50 例评测里从未触发，而改代码默认值毫无效果、
+    # 排查了很久才发现是 .env 覆盖。把生效值打到启动日志，让这类
+    # "配置被悄悄覆盖"的问题第一次启动就可见。
+    logger.info(
+        "推理参数：置信度阈值=%s 采样温度=%s（值来自环境变量或 backend/.env）",
+        app.config.get('CONFIDENCE_THRESHOLD'),
+        app.config.get('LLM_TEMPERATURE'),
+    )
+
     logger.info(f"应用装配完成，耗时 {time.time() - t_start:.3f}s")
     return app
 
